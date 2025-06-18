@@ -1,0 +1,10 @@
+# 忽略所有 data 目录及子文件
+/data/
+
+# （可选）常见临时文件和生成文件
+# Jupyter checkpoint
+.ipynb_checkpoints/
+
+# Python 编译文件
+__pycache__/
+*.pyc

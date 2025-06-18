@@ -1,0 +1,64 @@
+# RiskNICLP-5G 数据预处理配置文件
+
+# 数据路径配置
+data:
+  raw_data_path: "data/raw/BTS1_BTS2_fields_preserved.csv"
+  processed_data_path: "data/processed/"
+  graphs_path: "data/processed/graphs/"
+  metadata_path: "data/processed/metadata/"
+
+# 时间窗口配置
+temporal:
+  fine_window_size: 3  # 细粒度窗口大小(秒)
+  fine_step_size: 1    # 细粒度步长(秒)
+  coarse_window_size: 30  # 粗粒度窗口大小(秒)
+  coarse_step_size: 10    # 粗粒度步长(秒)
+  base_timestamp: 1663200000  # 基准时间戳
+
+# 实体分类配置
+entity_classification:
+  ue_ip_prefix: "10.155.15."
+  core_ip_prefix: "10.41.150."
+  external_ip_prefixes: ["109.105.", "142.250.", "193.166."]
+  control_plane_protocol: "sctp"
+
+# 威胁权重配置
+threat_weights:
+  attack_types:
+    ICMPFlood: 0.3
+    UDPScan: 0.5
+    SYNScan: 0.6
+    TCPConnectScan: 0.6
+    SYNFlood: 0.7
+    UDPFlood: 0.7
+    SlowrateDoS: 0.8
+    HTTPFlood: 0.9
+    Benign: 0.0
+  
+  tools:
+    Nmap: 0.8
+    Hping3: 1.0
+    Goldeneye: 1.2
+    Torshammer: 1.1
+    Slowloris: 1.0
+    Benign: 1.0
+
+# Risk-PPR配置
+risk_ppr:
+  alpha: 0.15  # 重启概率
+  max_iterations: 100
+  tolerance: 1e-6
+
+# 图构建配置
+graph:
+  node_types: ["UE", "Flow", "Alert"]
+  edge_types: 
+    - ["UE", "initiates", "Flow"]
+    - ["Flow", "triggers", "Alert"] 
+    - ["Flow", "temporal_adj", "Flow"]
+
+# 输出配置
+output:
+  save_intermediate: true  # 保存中间结果
+  visualization: true      # 生成可视化图表
+  quality_reports: true    # 生成质量报告 
