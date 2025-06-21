@@ -7,6 +7,52 @@ data:
   graphs_path: "data/processed/graphs/"
   metadata_path: "data/processed/metadata/"
 
+# 数据类型配置
+data_types:
+  mixed_type_columns: [23, 24, 28, 36, 96, 97, 109, 115]
+  problem_columns:
+    - name: "Proto"
+      index: 23
+      target_type: "str"
+    - name: "Sport" 
+      index: 24
+      target_type: "int64"
+    - name: "sTos"
+      index: 28
+      target_type: "str"
+    - name: "sIpId"
+      index: 36
+      target_type: "str"
+    - name: "SrcWin"
+      index: 96
+      target_type: "str"
+    - name: "DstWin"
+      index: 97
+      target_type: "str"
+    - name: "AckDat"
+      index: 109
+      target_type: "str"
+    - name: "is_5g_control_plane"
+      index: 115
+      target_type: "bool"
+
+# 数据质量配置
+data_quality:
+  min_quality_score: 50.0
+  max_missing_percentage: 30.0
+  enable_type_conversion: true
+  strict_validation: false
+
+# 错误处理配置
+error_handling:
+  max_retry_attempts: 3
+  skip_on_conversion_error: true
+  log_detailed_errors: true
+  fallback_strategies:
+    - "coerce_to_numeric"
+    - "convert_to_string"
+    - "use_default_values"
+
 # 时间窗口配置
 temporal:
   fine_window_size: 3  # 细粒度窗口大小(秒)
@@ -56,9 +102,19 @@ graph:
     - ["UE", "initiates", "Flow"]
     - ["Flow", "triggers", "Alert"] 
     - ["Flow", "temporal_adj", "Flow"]
+  feature_validation: true
+  quality_threshold: 50.0
+
+# 性能监控配置
+performance:
+  enable_timing: true
+  log_memory_usage: true
+  profile_functions: false
+  benchmark_iterations: 3
 
 # 输出配置
 output:
   save_intermediate: true  # 保存中间结果
   visualization: true      # 生成可视化图表
-  quality_reports: true    # 生成质量报告 
+  quality_reports: true    # 生成质量报告
+  error_reports: true      # 生成错误报告 
