@@ -62,7 +62,7 @@ class ProgressiveTrainer:
         
     def train_progressive(self, train_loader: DataLoader, val_loader: DataLoader) -> nn.Module:
         """
-        Progressive training with multiple phases
+        Progressive training with three phases: Basic -> Risk-aware -> Full-fusion
         
         Args:
             train_loader: Training data loader
@@ -73,10 +73,87 @@ class ProgressiveTrainer:
         """
         max_epochs = getattr(self.config.training, 'max_epochs', 20)
         
+        # Define progressive training phases
+        phases = {
+            'basic': {
+                'epochs': 5,
+                'thresholds': {'val_auc': 0.80},
+                'description': 'Basic GNN feature learning'
+            },
+            'risk_aware': {
+                'epochs': 10, 
+                'thresholds': {'risk_recall_100': 0.75},
+                'description': 'Risk-aware attention training'
+            },
+            'full_fusion': {
+                'epochs': max_epochs,
+                'thresholds': None,
+                'description': 'Complete model optimization'
+            }
+        }
+        
+        current_phase = 'basic'
+        phase_start_epoch = 0
+        
+        # Start with frozen risk parameters
+        if hasattr(self.model, 'shared_encoder'):
+            if hasattr(self.model.shared_encoder, 'freeze_risk_params'):
+                self.model.shared_encoder.freeze_risk_params()
+                self.logger.logger.info("🔒 Risk parameters frozen for basic phase")
+        
         for epoch in range(max_epochs):
             self.current_epoch = epoch
             
-            # Training phase
+            # Check if should advance to next phase
+            if epoch > phase_start_epoch:
+                phase_config = phases[current_phase]
+                
+                # Get validation metrics for phase decision
+                val_metrics = self.validate_epoch(val_loader)
+                
+                should_advance = False
+                
+                # Check epoch-based advancement
+                if epoch - phase_start_epoch >= phase_config['epochs']:
+                    should_advance = True
+                    advancement_reason = "epoch limit reached"
+                    
+                # Check metric-based advancement  
+                elif phase_config['thresholds']:
+                    for metric_name, threshold in phase_config['thresholds'].items():
+                        if val_metrics.get(metric_name, 0) >= threshold:
+                            should_advance = True
+                            advancement_reason = f"{metric_name} >= {threshold}"
+                            break
+                
+                # Advance to next phase
+                if should_advance and current_phase != 'full_fusion':
+                    next_phase = self._get_next_phase(current_phase)
+                    self.logger.logger.info(
+                        f"🔄 Advancing from {current_phase} to {next_phase} phase "
+                        f"(reason: {advancement_reason})"
+                    )
+                    
+                    # Update training phase
+                    current_phase = next_phase
+                    phase_start_epoch = epoch
+                    
+                    # Unfreeze risk parameters when entering risk-aware phase
+                    if current_phase == 'risk_aware':
+                        if hasattr(self.model, 'shared_encoder'):
+                            if hasattr(self.model.shared_encoder, 'unfreeze_risk_params'):
+                                self.model.shared_encoder.unfreeze_risk_params()
+                                self.logger.logger.info("🔓 Risk parameters unfrozen for risk-aware phase")
+                    
+                    # Enable full fusion capabilities
+                    elif current_phase == 'full_fusion':
+                        self.logger.logger.info("🚀 Full fusion phase activated")
+            
+            # Update model training phase
+            if hasattr(self.model, 'training_phase'):
+                self.model.training_phase = current_phase
+            
+            # Training phase  
             train_loss = self.train_epoch(train_loader)
             
             # Validation phase
@@ -85,19 +162,37 @@ class ProgressiveTrainer:
             # Update scheduler
             self.scheduler.step()
             
-            # Log progress
+            # Enhanced logging with phase info
+            phase_desc = phases[current_phase]['description']
             self.logger.logger.info(
-                f"Epoch {epoch + 1}/{max_epochs}: "
+                f"📊 Epoch {epoch + 1}/{max_epochs} [{current_phase.upper()}]: "
                 f"Train Loss: {train_loss:.4f}, "
-                f"Val AUC: {val_metrics.get('auc', 0.0):.4f}"
+                f"Val AUC: {val_metrics.get('auc', 0.0):.4f}, "
+                f"Phase: {phase_desc}"
             )
             
             # Save best model
-            if val_metrics.get('auc', 0.0) > self.best_metric:
-                self.best_metric = val_metrics.get('auc', 0.0)
+            current_metric = val_metrics.get('auc', 0.0)
+            if current_metric > self.best_metric:
+                self.best_metric = current_metric
                 self.save_checkpoint('best_model.pt')
+                self.logger.logger.info(f"💾 New best model saved (AUC: {current_metric:.4f})")
+        
+        # Final phase summary
+        self.logger.logger.info(f"✅ Progressive training completed. Best AUC: {self.best_metric:.4f}")
         
         return self.model
+    
+    def _get_next_phase(self, current_phase: str) -> str:
+        """Get next training phase"""
+        phase_order = ['basic', 'risk_aware', 'full_fusion']
+        try:
+            current_idx = phase_order.index(current_phase)
+            if current_idx < len(phase_order) - 1:
+                return phase_order[current_idx + 1]
+        except ValueError:
+            pass
+        return 'full_fusion'  # Default to final phase
         
     def train_epoch(self, data_loader: DataLoader) -> float:
         """

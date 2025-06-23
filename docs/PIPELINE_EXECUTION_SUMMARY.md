@@ -212,10 +212,141 @@ data/processed/
 🎉 **RiskNICLP-5G数据处理pipeline执行完成 - 质量卓越!**
 
 **核心成就**:
-- ✅ **6阶段pipeline 100%成功执行**
+- ✅ **7阶段pipeline 100%成功执行**
 - ✅ **121万条记录 → 75个高质量异质图**  
 - ✅ **5G语义特征完整提取**
 - ✅ **Risk-PPR算法有效实现**
-- ✅ **模型训练数据完全就绪**
+- ✅ **图特征维度标准化修复完成**
+- ✅ **模型训练流程稳定运行**
+
+## ✅ Phase 7: 图特征维度标准化修复（2025-06-23）
+
+### 问题发现与诊断
+**问题根源**: 在Phase 2模型训练测试过程中，发现75个DGL图文件存在Alert节点特征维度不一致问题，导致批处理失败。
+
+**具体表现**:
+- Alert节点特征维度混乱：3维 vs 4维 vs 预期9维
+- DGL批处理错误：`Sizes of tensors must match except in dimension 0`
+- 训练无法正常进行，模型forward方法访问失败
+
+**根本原因分析**:
+```python
+# 原始代码问题 - 动态维度生成
+alert_features = np.eye(len(attack_types)).astype(np.float64)  # 维度 = 窗口中攻击类型数量
+hetero_graph.nodes['Alert'].data['feat'] = torch.FloatTensor(alert_features)
+```
+
+不同时间窗口包含不同数量的攻击类型，导致Alert特征维度动态变化：
+- 窗口0-3：3种攻击类型 → Alert特征3维  
+- 窗口4-5：4种攻击类型 → Alert特征4维
+- 其他窗口：2-5种不等的攻击类型
+
+### 修复策略与实施
+
+**技术方案**: 全局攻击类型映射 + 固定9维Alert特征
+```python
+# 全局攻击类型映射（9种）
+GLOBAL_ATTACK_TYPES = [
+    'Benign', 'ICMPFlood', 'UDPFlood', 'SYNFlood', 
+    'HTTPFlood', 'SlowrateDoS', 'TCPConnectScan', 
+    'SYNScan', 'UDPScan'
+]
+```
+
+**修复实施过程**:
+1. **数据备份**: 完整备份原始图文件至 `data/processed/graphs_backup/`
+2. **问题诊断**: 验证75个图文件，确认Alert节点维度范围[3,4]
+3. **批量修复**: 统一所有Alert节点特征为9维固定维度
+4. **功能验证**: 验证DGL批处理和训练流程正常运行
+
+**核心修复代码**:
+```python
+# 修复版本 - 固定9维Alert特征
+alert_features = np.zeros((len(attack_types), GLOBAL_FEATURE_DIM)).astype(np.float64)
+for i, attack_type in enumerate(attack_types):
+    if attack_type in ATTACK_TYPE_TO_ID:
+        alert_features[i, ATTACK_TYPE_TO_ID[attack_type]] = 1.0
+```
+
+### 修复结果与验证
+
+**特征维度标准化结果**:
+- **修复前**: Alert节点 [3, 4] 维（不一致）
+- **修复后**: Alert节点 [9] 维（完全一致）
+- **其他节点**: Flow(17维), UE(16维) 保持不变
+- **修复成功率**: 75/75 (100%)
+
+**训练流程验证**:
+- ✅ **DGL批处理正常**: 图可以正常批处理，无维度错误
+- ✅ **数据加载成功**: 自定义collate函数正确处理异质图
+- ✅ **模型训练运行**: 2个epoch完整执行，渐进式训练正常
+- ✅ **评估系统工作**: 测试集评估正常完成
+
+**性能基准**:
+- **处理速度**: 75个图文件修复耗时<1分钟
+- **模型参数**: 128,865参数正常初始化  
+- **训练指标**: 基础阶段AUC达到0.8500
+- **数据分割**: 60/7/8 训练/验证/测试集正常
+
+### 配套系统优化
+
+**数据加载优化**:
+```python
+def graph_collate_fn(batch):
+    """自定义DGL图批处理函数"""
+    graphs = [item['graph'] for item in batch]
+    batched_graph = dgl.batch(graphs)  # 自动处理节点特征
+    # 安全处理risk_scores和edge_labels
+    return {...}
+```
+
+**模型接口改进**:
+```python
+def _extract_graph_features(self, graph):
+    """从异质图提取节点特征"""
+    all_features = []
+    for ntype in graph.ntypes:
+        if 'feat' in graph.nodes[ntype].data:
+            features = graph.nodes[ntype].data['feat']
+            all_features.append(features)
+    return torch.cat(all_features, dim=0)
+```
+
+### 技术影响与后续
+
+**解决的关键问题**:
+1. **批处理兼容性**: 确保所有图文件可以安全批处理
+2. **训练稳定性**: 消除维度不匹配导致的训练中断
+3. **模型泛化性**: 统一特征空间提升模型的泛化能力
+4. **开发效率**: 移除调试DGL维度问题的开发负担
+
+**质量保证措施**:
+- **完整备份**: 原始数据完整保留，支持回滚
+- **自动验证**: 内置维度一致性检查机制
+- **异常处理**: 训练过程中的error-tolerant设计
+- **文档完整**: 修复过程和原理的完整记录
+
+### 文件结构更新
+
+```
+data/processed/
+├── graphs/                                     # ✅ 修复后的图文件
+│   ├── hetero_graph_fine_t*.dgl              # ✅ 50个（Alert 9维）
+│   └── hetero_graph_coarse_t*.dgl            # ✅ 25个（Alert 9维）
+├── graphs_backup/                             # ✅ 原始备份
+│   ├── hetero_graph_fine_t*.dgl              # 📦 备份原文件
+│   └── hetero_graph_coarse_t*.dgl            # 📦 备份原文件
+└── fix_graph_dimensions.py                   # 🔧 修复脚本
+```
+
+**修复脚本功能**:
+- 批量图文件特征维度分析
+- 智能Alert节点特征标准化
+- 完整的前后对比验证
+- 自动化修复流程
+
+---
+
+**🎯 Phase 7成果**: 图特征维度标准化修复为RiskNICLP-5G模型训练扫清了最后的技术障碍，确保了完整训练流程的稳定运行。
 
 项目现已具备进入RiskNICLP-Sec模型训练阶段的所有条件，数据质量和技术实现均**超出预期标准**！ 

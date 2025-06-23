@@ -1,243 +1,57 @@
-2025-06-22 09:46:47,149 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 09:46:47,150 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_094647
-2025-06-22 09:46:47,150 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_094647', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 09:46:47,150 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 09:46:47,150 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 09:46:47,160 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 09:46:47,160 - RiskNICLP-5G - ERROR - train.py:337 - ❌ Training failed: 'DataConfig' object has no attribute 'get'
-2025-06-22 09:46:47,160 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-22 09:51:47,904 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 09:51:47,905 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_095147
-2025-06-22 09:51:47,905 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_095147', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 09:51:47,905 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 09:51:47,905 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 09:51:47,913 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 09:51:47,918 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-22 09:51:47,919 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-22 09:51:47,920 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-22 09:51:47,924 - RiskNICLP-5G - ERROR - train.py:337 - ❌ Training failed: SAGEConv.__init__() got an unexpected keyword argument 'dropout'
-2025-06-22 09:51:47,924 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-22 10:12:21,190 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 10:12:21,190 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_101221
-2025-06-22 10:12:21,191 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_101221', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 10:12:21,191 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 10:12:21,191 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 10:12:21,199 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 10:12:21,200 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-22 10:12:21,200 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-22 10:12:21,201 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-22 10:12:21,207 - RiskNICLP-5G - ERROR - train.py:337 - ❌ Training failed: RiskGravityDecoder.__init__() missing 1 required positional argument: 'input_dim'
-2025-06-22 10:12:21,207 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-22 10:21:54,428 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 10:21:54,428 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_102154
-2025-06-22 10:21:54,429 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_102154', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 10:21:54,429 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 10:21:54,429 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 10:21:54,436 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 10:21:54,437 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-22 10:21:54,438 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-22 10:21:54,439 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-22 10:21:54,451 - RiskNICLP-5G - ERROR - train.py:337 - ❌ Training failed: new(): invalid data type 'str'
-2025-06-22 10:21:54,451 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-22 10:26:26,046 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 10:26:26,046 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_102626
-2025-06-22 10:26:26,046 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_102626', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 10:26:26,046 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 10:26:26,046 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 10:26:26,054 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 10:26:26,056 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-22 10:26:26,056 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-22 10:26:26,057 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-22 10:26:26,066 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 128865.0000, model/trainable_parameters: 128845.0000, model/non_trainable_parameters: 20.0000
-2025-06-22 10:26:26,067 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 128,865 total parameters, 128,845 trainable
-2025-06-22 10:26:26,067 - RiskNICLP-5G - INFO - train.py:218 - 🏃 Setting up progressive trainer...
-2025-06-22 10:26:26,067 - RiskNICLP-5G - ERROR - train.py:337 - ❌ Training failed: '<=' not supported between instances of 'float' and 'str'
-2025-06-22 10:26:26,067 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-22 10:27:41,001 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 10:27:41,001 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_102741
-2025-06-22 10:27:41,001 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_102741', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 10:27:41,002 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 10:27:41,002 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 10:27:41,010 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 10:27:41,012 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-22 10:27:41,012 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-22 10:27:41,013 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-22 10:27:41,021 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 128865.0000, model/trainable_parameters: 128845.0000, model/non_trainable_parameters: 20.0000
-2025-06-22 10:27:41,021 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 128,865 total parameters, 128,845 trainable
-2025-06-22 10:27:41,022 - RiskNICLP-5G - INFO - train.py:218 - 🏃 Setting up progressive trainer...
-2025-06-22 10:27:41,656 - RiskNICLP-5G - INFO - train.py:232 - 📊 Setting up evaluator...
-2025-06-22 10:27:41,656 - RiskNICLP-5G - INFO - train.py:292 - 🚀 Starting training...
-2025-06-22 10:27:41,807 - RiskNICLP-5G - INFO - training.py:89 - Epoch 1/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:41,808 - RiskNICLP-5G - INFO - training.py:185 - Checkpoint saved: best_model.pt
-2025-06-22 10:27:41,945 - RiskNICLP-5G - INFO - training.py:89 - Epoch 2/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:42,117 - RiskNICLP-5G - INFO - training.py:89 - Epoch 3/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:42,270 - RiskNICLP-5G - INFO - training.py:89 - Epoch 4/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:42,408 - RiskNICLP-5G - INFO - training.py:89 - Epoch 5/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:42,566 - RiskNICLP-5G - INFO - training.py:89 - Epoch 6/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:42,725 - RiskNICLP-5G - INFO - training.py:89 - Epoch 7/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:42,869 - RiskNICLP-5G - INFO - training.py:89 - Epoch 8/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,017 - RiskNICLP-5G - INFO - training.py:89 - Epoch 9/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,168 - RiskNICLP-5G - INFO - training.py:89 - Epoch 10/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,302 - RiskNICLP-5G - INFO - training.py:89 - Epoch 11/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,457 - RiskNICLP-5G - INFO - training.py:89 - Epoch 12/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,589 - RiskNICLP-5G - INFO - training.py:89 - Epoch 13/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,740 - RiskNICLP-5G - INFO - training.py:89 - Epoch 14/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:43,889 - RiskNICLP-5G - INFO - training.py:89 - Epoch 15/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:44,029 - RiskNICLP-5G - INFO - training.py:89 - Epoch 16/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:44,158 - RiskNICLP-5G - INFO - training.py:89 - Epoch 17/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:44,293 - RiskNICLP-5G - INFO - training.py:89 - Epoch 18/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:44,437 - RiskNICLP-5G - INFO - training.py:89 - Epoch 19/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:44,568 - RiskNICLP-5G - INFO - training.py:89 - Epoch 20/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:27:44,569 - RiskNICLP-5G - INFO - train.py:301 - 🎯 Running final evaluation...
-2025-06-22 10:27:44,569 - RiskNICLP-5G - INFO - evaluator.py:54 - Evaluation completed for test
-2025-06-22 10:27:44,569 - RiskNICLP-5G - INFO - train.py:309 - 📊 Test Results:
-2025-06-22 10:27:44,569 - RiskNICLP-5G - INFO - train.py:311 -   auc: 0.8500
-2025-06-22 10:27:44,569 - RiskNICLP-5G - INFO - train.py:311 -   aupr: 0.4500
-2025-06-22 10:27:44,570 - RiskNICLP-5G - INFO - train.py:311 -   precision: 0.8000
-2025-06-22 10:27:44,570 - RiskNICLP-5G - INFO - train.py:311 -   recall: 0.7500
-2025-06-22 10:27:44,570 - RiskNICLP-5G - INFO - train.py:311 -   f1: 0.7700
-2025-06-22 10:27:44,570 - RiskNICLP-5G - INFO - logger.py:139 - Step 1 - final_test/auc: 0.8500, final_test/aupr: 0.4500, final_test/precision: 0.8000, final_test/recall: 0.7500, final_test/f1: 0.7700
-2025-06-22 10:27:44,575 - RiskNICLP-5G - INFO - train.py:329 - 💾 Model saved to: logs/riskniclp_baseline_20250622_102741/final_model.pt
-2025-06-22 10:27:44,575 - RiskNICLP-5G - INFO - train.py:330 - ✅ Training completed successfully!
-2025-06-22 10:27:44,575 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-22 10:30:51,249 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-22 10:30:51,249 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250622_103051
-2025-06-22 10:30:51,249 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250622_103051', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-22 10:30:51,250 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-22 10:30:51,250 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-22 10:30:51,260 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-22 10:30:51,262 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-22 10:30:51,263 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-22 10:30:51,265 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-22 10:30:51,274 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 128865.0000, model/trainable_parameters: 128845.0000, model/non_trainable_parameters: 20.0000
-2025-06-22 10:30:51,275 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 128,865 total parameters, 128,845 trainable
-2025-06-22 10:30:51,275 - RiskNICLP-5G - INFO - train.py:218 - 🏃 Setting up progressive trainer...
-2025-06-22 10:30:51,824 - RiskNICLP-5G - INFO - train.py:232 - 📊 Setting up evaluator...
-2025-06-22 10:30:51,824 - RiskNICLP-5G - INFO - train.py:292 - 🚀 Starting training...
-2025-06-22 10:30:51,984 - RiskNICLP-5G - INFO - training.py:89 - Epoch 1/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:51,985 - RiskNICLP-5G - INFO - training.py:185 - Checkpoint saved: best_model.pt
-2025-06-22 10:30:52,122 - RiskNICLP-5G - INFO - training.py:89 - Epoch 2/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:52,269 - RiskNICLP-5G - INFO - training.py:89 - Epoch 3/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:52,424 - RiskNICLP-5G - INFO - training.py:89 - Epoch 4/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:52,562 - RiskNICLP-5G - INFO - training.py:89 - Epoch 5/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:52,703 - RiskNICLP-5G - INFO - training.py:89 - Epoch 6/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:52,844 - RiskNICLP-5G - INFO - training.py:89 - Epoch 7/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:52,984 - RiskNICLP-5G - INFO - training.py:89 - Epoch 8/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:53,119 - RiskNICLP-5G - INFO - training.py:89 - Epoch 9/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:53,265 - RiskNICLP-5G - INFO - training.py:89 - Epoch 10/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:53,413 - RiskNICLP-5G - INFO - training.py:89 - Epoch 11/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:53,566 - RiskNICLP-5G - INFO - training.py:89 - Epoch 12/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:53,702 - RiskNICLP-5G - INFO - training.py:89 - Epoch 13/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:53,854 - RiskNICLP-5G - INFO - training.py:89 - Epoch 14/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,000 - RiskNICLP-5G - INFO - training.py:89 - Epoch 15/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,146 - RiskNICLP-5G - INFO - training.py:89 - Epoch 16/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,299 - RiskNICLP-5G - INFO - training.py:89 - Epoch 17/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,442 - RiskNICLP-5G - INFO - training.py:89 - Epoch 18/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,586 - RiskNICLP-5G - INFO - training.py:89 - Epoch 19/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,732 - RiskNICLP-5G - INFO - training.py:89 - Epoch 20/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-22 10:30:54,733 - RiskNICLP-5G - INFO - train.py:301 - 🎯 Running final evaluation...
-2025-06-22 10:30:54,734 - RiskNICLP-5G - INFO - evaluator.py:54 - Evaluation completed for test
-2025-06-22 10:30:54,734 - RiskNICLP-5G - INFO - train.py:309 - 📊 Test Results:
-2025-06-22 10:30:54,734 - RiskNICLP-5G - INFO - train.py:311 -   auc: 0.8500
-2025-06-22 10:30:54,734 - RiskNICLP-5G - INFO - train.py:311 -   aupr: 0.4500
-2025-06-22 10:30:54,734 - RiskNICLP-5G - INFO - train.py:311 -   precision: 0.8000
-2025-06-22 10:30:54,734 - RiskNICLP-5G - INFO - train.py:311 -   recall: 0.7500
-2025-06-22 10:30:54,735 - RiskNICLP-5G - INFO - train.py:311 -   f1: 0.7700
-2025-06-22 10:30:54,735 - RiskNICLP-5G - INFO - logger.py:139 - Step 1 - final_test/auc: 0.8500, final_test/aupr: 0.4500, final_test/precision: 0.8000, final_test/recall: 0.7500, final_test/f1: 0.7700
-2025-06-22 10:30:54,740 - RiskNICLP-5G - INFO - train.py:329 - 💾 Model saved to: logs/riskniclp_baseline_20250622_103051/final_model.pt
-2025-06-22 10:30:54,740 - RiskNICLP-5G - INFO - train.py:330 - ✅ Training completed successfully!
-2025-06-22 10:30:54,740 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-23 09:01:09,113 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-23 09:01:09,114 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250623_090109
-2025-06-23 09:01:09,114 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250623_090109', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-23 09:01:09,114 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-23 09:01:09,114 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-23 09:01:09,121 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-23 09:01:09,123 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-23 09:01:09,123 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-23 09:01:09,124 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-23 09:01:09,133 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 128865.0000, model/trainable_parameters: 128845.0000, model/non_trainable_parameters: 20.0000
-2025-06-23 09:01:09,133 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 128,865 total parameters, 128,845 trainable
-2025-06-23 09:01:09,133 - RiskNICLP-5G - INFO - train.py:218 - 🏃 Setting up progressive trainer...
-2025-06-23 09:01:09,667 - RiskNICLP-5G - INFO - train.py:232 - 📊 Setting up evaluator...
-2025-06-23 09:01:09,667 - RiskNICLP-5G - INFO - train.py:292 - 🚀 Starting training...
-2025-06-23 09:01:09,830 - RiskNICLP-5G - INFO - training.py:89 - Epoch 1/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:09,833 - RiskNICLP-5G - INFO - training.py:185 - Checkpoint saved: best_model.pt
-2025-06-23 09:01:09,981 - RiskNICLP-5G - INFO - training.py:89 - Epoch 2/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,136 - RiskNICLP-5G - INFO - training.py:89 - Epoch 3/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,270 - RiskNICLP-5G - INFO - training.py:89 - Epoch 4/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,416 - RiskNICLP-5G - INFO - training.py:89 - Epoch 5/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,560 - RiskNICLP-5G - INFO - training.py:89 - Epoch 6/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,704 - RiskNICLP-5G - INFO - training.py:89 - Epoch 7/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,859 - RiskNICLP-5G - INFO - training.py:89 - Epoch 8/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:10,994 - RiskNICLP-5G - INFO - training.py:89 - Epoch 9/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:11,143 - RiskNICLP-5G - INFO - training.py:89 - Epoch 10/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:11,302 - RiskNICLP-5G - INFO - training.py:89 - Epoch 11/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:11,436 - RiskNICLP-5G - INFO - training.py:89 - Epoch 12/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:11,588 - RiskNICLP-5G - INFO - training.py:89 - Epoch 13/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:11,736 - RiskNICLP-5G - INFO - training.py:89 - Epoch 14/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:11,867 - RiskNICLP-5G - INFO - training.py:89 - Epoch 15/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:12,003 - RiskNICLP-5G - INFO - training.py:89 - Epoch 16/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:12,147 - RiskNICLP-5G - INFO - training.py:89 - Epoch 17/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:12,289 - RiskNICLP-5G - INFO - training.py:89 - Epoch 18/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:12,419 - RiskNICLP-5G - INFO - training.py:89 - Epoch 19/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:12,570 - RiskNICLP-5G - INFO - training.py:89 - Epoch 20/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - train.py:301 - 🎯 Running final evaluation...
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - evaluator.py:54 - Evaluation completed for test
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - train.py:309 - 📊 Test Results:
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - train.py:311 -   auc: 0.8500
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - train.py:311 -   aupr: 0.4500
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - train.py:311 -   precision: 0.8000
-2025-06-23 09:01:12,571 - RiskNICLP-5G - INFO - train.py:311 -   recall: 0.7500
-2025-06-23 09:01:12,572 - RiskNICLP-5G - INFO - train.py:311 -   f1: 0.7700
-2025-06-23 09:01:12,572 - RiskNICLP-5G - INFO - logger.py:139 - Step 1 - final_test/auc: 0.8500, final_test/aupr: 0.4500, final_test/precision: 0.8000, final_test/recall: 0.7500, final_test/f1: 0.7700
-2025-06-23 09:01:12,577 - RiskNICLP-5G - INFO - train.py:329 - 💾 Model saved to: logs/riskniclp_baseline_20250623_090109/final_model.pt
-2025-06-23 09:01:12,577 - RiskNICLP-5G - INFO - train.py:330 - ✅ Training completed successfully!
-2025-06-23 09:01:12,577 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
-2025-06-23 09:06:16,803 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-23 09:06:16,803 - RiskNICLP-5G - INFO - train.py:98 - 🚀 Starting experiment: riskniclp_baseline_20250623_090616
-2025-06-23 09:06:16,803 - RiskNICLP-5G - INFO - train.py:99 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=4, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=True, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250623_090616', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization')
-2025-06-23 09:06:16,804 - RiskNICLP-5G - INFO - train.py:267 - 🖥️ Device: cpu
-2025-06-23 09:06:16,804 - RiskNICLP-5G - INFO - train.py:268 - 🧵 Threads: 8
-2025-06-23 09:06:16,813 - RiskNICLP-5G - INFO - train.py:106 - 📊 Preparing data processing pipeline...
-2025-06-23 09:06:16,814 - RiskNICLP-5G - INFO - train.py:137 - 🔄 Fitting data processors...
-2025-06-23 09:06:16,814 - RiskNICLP-5G - INFO - train.py:148 - 📈 Data splits: Train=100, Val=100, Test=100
-2025-06-23 09:06:16,815 - RiskNICLP-5G - INFO - train.py:188 - 🏗️ Creating model architecture...
-2025-06-23 09:06:16,824 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 128865.0000, model/trainable_parameters: 128845.0000, model/non_trainable_parameters: 20.0000
-2025-06-23 09:06:16,824 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 128,865 total parameters, 128,845 trainable
-2025-06-23 09:06:16,824 - RiskNICLP-5G - INFO - train.py:218 - 🏃 Setting up progressive trainer...
-2025-06-23 09:06:17,355 - RiskNICLP-5G - INFO - train.py:232 - 📊 Setting up evaluator...
-2025-06-23 09:06:17,355 - RiskNICLP-5G - INFO - train.py:292 - 🚀 Starting training...
-2025-06-23 09:06:17,509 - RiskNICLP-5G - INFO - training.py:89 - Epoch 1/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:17,511 - RiskNICLP-5G - INFO - training.py:185 - Checkpoint saved: best_model.pt
-2025-06-23 09:06:17,667 - RiskNICLP-5G - INFO - training.py:89 - Epoch 2/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:17,817 - RiskNICLP-5G - INFO - training.py:89 - Epoch 3/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:17,962 - RiskNICLP-5G - INFO - training.py:89 - Epoch 4/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,107 - RiskNICLP-5G - INFO - training.py:89 - Epoch 5/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,247 - RiskNICLP-5G - INFO - training.py:89 - Epoch 6/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,383 - RiskNICLP-5G - INFO - training.py:89 - Epoch 7/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,527 - RiskNICLP-5G - INFO - training.py:89 - Epoch 8/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,668 - RiskNICLP-5G - INFO - training.py:89 - Epoch 9/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,807 - RiskNICLP-5G - INFO - training.py:89 - Epoch 10/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:18,943 - RiskNICLP-5G - INFO - training.py:89 - Epoch 11/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,080 - RiskNICLP-5G - INFO - training.py:89 - Epoch 12/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,213 - RiskNICLP-5G - INFO - training.py:89 - Epoch 13/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,357 - RiskNICLP-5G - INFO - training.py:89 - Epoch 14/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,510 - RiskNICLP-5G - INFO - training.py:89 - Epoch 15/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,659 - RiskNICLP-5G - INFO - training.py:89 - Epoch 16/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,795 - RiskNICLP-5G - INFO - training.py:89 - Epoch 17/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:19,930 - RiskNICLP-5G - INFO - training.py:89 - Epoch 18/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:20,089 - RiskNICLP-5G - INFO - training.py:89 - Epoch 19/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:20,230 - RiskNICLP-5G - INFO - training.py:89 - Epoch 20/20: Train Loss: 0.5000, Val AUC: 0.8500
-2025-06-23 09:06:20,230 - RiskNICLP-5G - INFO - train.py:301 - 🎯 Running final evaluation...
-2025-06-23 09:06:20,230 - RiskNICLP-5G - INFO - evaluator.py:54 - Evaluation completed for test
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - train.py:309 - 📊 Test Results:
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - train.py:311 -   auc: 0.8500
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - train.py:311 -   aupr: 0.4500
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - train.py:311 -   precision: 0.8000
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - train.py:311 -   recall: 0.7500
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - train.py:311 -   f1: 0.7700
-2025-06-23 09:06:20,231 - RiskNICLP-5G - INFO - logger.py:139 - Step 1 - final_test/auc: 0.8500, final_test/aupr: 0.4500, final_test/precision: 0.8000, final_test/recall: 0.7500, final_test/f1: 0.7700
-2025-06-23 09:06:20,236 - RiskNICLP-5G - INFO - train.py:329 - 💾 Model saved to: logs/riskniclp_baseline_20250623_090616/final_model.pt
-2025-06-23 09:06:20,236 - RiskNICLP-5G - INFO - train.py:330 - ✅ Training completed successfully!
-2025-06-23 09:06:20,236 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
+2025-06-23 13:56:27,407 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
+2025-06-23 13:56:27,407 - RiskNICLP-5G - INFO - train.py:143 - 🚀 Starting experiment: riskniclp_baseline_20250623_135627
+2025-06-23 13:56:27,407 - RiskNICLP-5G - INFO - train.py:144 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=2, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=0, pin_memory=True, prefetch_factor=None, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='DEBUG', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250623_135627', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-06-23 13:56:27,407 - RiskNICLP-5G - INFO - train.py:325 - 🖥️ Device: cpu
+2025-06-23 13:56:27,407 - RiskNICLP-5G - INFO - train.py:326 - 🧵 Threads: 8
+2025-06-23 13:56:27,420 - RiskNICLP-5G - INFO - train.py:151 - 📊 Preparing data processing pipeline...
+2025-06-23 13:56:27,421 - RiskNICLP-5G - INFO - train.py:182 - 🔄 Fitting data processors...
+2025-06-23 13:56:27,423 - RiskNICLP-5G - INFO - train.py:193 - 📈 Data splits: Train=60, Val=7, Test=8
+2025-06-23 13:56:27,423 - RiskNICLP-5G - INFO - train.py:237 - 🏗️ Creating model architecture...
+2025-06-23 13:56:27,428 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 57710.0000, model/trainable_parameters: 57710.0000, model/non_trainable_parameters: 0.0000
+2025-06-23 13:56:27,428 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 57,710 total parameters, 57,710 trainable
+2025-06-23 13:56:27,428 - RiskNICLP-5G - INFO - train.py:267 - 🏃 Setting up progressive trainer...
+2025-06-23 13:56:27,974 - RiskNICLP-5G - INFO - train.py:281 - 📊 Setting up evaluator...
+2025-06-23 13:56:27,974 - RiskNICLP-5G - INFO - train.py:350 - 🚀 Starting training...
+2025-06-23 13:56:27,974 - RiskNICLP-5G - INFO - training.py:102 - 🔒 Risk parameters frozen for basic phase
+2025-06-23 13:56:31,535 - RiskNICLP-5G - INFO - training.py:167 - 📊 Epoch 1/2 [BASIC]: Train Loss: 0.5000, Val AUC: 0.8500, Phase: Basic GNN feature learning
+2025-06-23 13:56:31,537 - RiskNICLP-5G - INFO - training.py:280 - Checkpoint saved: best_model.pt
+2025-06-23 13:56:31,537 - RiskNICLP-5G - INFO - training.py:179 - 💾 New best model saved (AUC: 0.8500)
+2025-06-23 13:56:35,128 - RiskNICLP-5G - INFO - training.py:167 - 📊 Epoch 2/2 [BASIC]: Train Loss: 0.5000, Val AUC: 0.8500, Phase: Basic GNN feature learning
+2025-06-23 13:56:35,129 - RiskNICLP-5G - INFO - training.py:182 - ✅ Progressive training completed. Best AUC: 0.8500
+2025-06-23 13:56:35,129 - RiskNICLP-5G - INFO - train.py:359 - 🎯 Running final evaluation...
+2025-06-23 13:56:35,129 - RiskNICLP-5G - INFO - evaluator.py:61 - 🎯 Starting evaluation on test set...
+2025-06-23 13:56:35,362 - RiskNICLP-5G - INFO - evaluator.py:398 - 📊 Evaluation Results for test:
+2025-06-23 13:56:35,362 - RiskNICLP-5G - INFO - evaluator.py:403 - 🚨 P0 - Real-time Security:
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:405 -   lead_time_mean: 0.0000
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:405 -   lead_time_std: 0.0000
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:405 -   mttd_30s: 16.7297
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:410 - 🎯 P1 - Detection Quality:
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:412 -   risk_weighted_precision: 0.0000
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:412 -   risk_weighted_recall: 0.0000
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:412 -   aupr: 0.5000
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:417 - 📍 P2 - Directional Accuracy:
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:419 -   directional_hit_100: 1.0000
+2025-06-23 13:56:35,363 - RiskNICLP-5G - INFO - evaluator.py:419 -   direction_error_rate: 0.0000
+2025-06-23 13:56:35,364 - RiskNICLP-5G - INFO - evaluator.py:424 - 📈 P3 - Traditional Metrics:
+2025-06-23 13:56:35,364 - RiskNICLP-5G - INFO - evaluator.py:426 -   auc: 0.5000
+2025-06-23 13:56:35,364 - RiskNICLP-5G - INFO - evaluator.py:426 -   hit_10: 0.0000
+2025-06-23 13:56:35,364 - RiskNICLP-5G - INFO - evaluator.py:426 -   hit_50: 0.0000
+2025-06-23 13:56:35,364 - RiskNICLP-5G - INFO - evaluator.py:426 -   hit_100: 0.0000
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - evaluator.py:472 - 💾 Evaluation results saved to logs/evaluation_test.json
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:367 - 📊 Test Results:
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:369 -   p0_lead_time_mean: 0.0000
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:369 -   p0_lead_time_std: 0.0000
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:369 -   p0_mttd_30s: 16.7297
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:369 -   p1_risk_weighted_precision: 0.0000
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:369 -   p1_risk_weighted_recall: 0.0000
+2025-06-23 13:56:35,365 - RiskNICLP-5G - INFO - train.py:369 -   p1_aupr: 0.5000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - train.py:369 -   p2_directional_hit_100: 1.0000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - train.py:369 -   p2_direction_error_rate: 0.0000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - train.py:369 -   p3_auc: 0.5000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - train.py:369 -   p3_hit_10: 0.0000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - train.py:369 -   p3_hit_50: 0.0000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - train.py:369 -   p3_hit_100: 0.0000
+2025-06-23 13:56:35,366 - RiskNICLP-5G - INFO - logger.py:139 - Step 1 - final_test/p0_lead_time_mean: 0.0000, final_test/p0_lead_time_std: 0.0000, final_test/p0_mttd_30s: 16.7297, final_test/p1_risk_weighted_precision: 0.0000, final_test/p1_risk_weighted_recall: 0.0000, final_test/p1_aupr: 0.5000, final_test/p2_directional_hit_100: 1.0000, final_test/p2_direction_error_rate: 0.0000, final_test/p3_auc: 0.5000, final_test/p3_hit_10: 0.0000, final_test/p3_hit_50: 0.0000, final_test/p3_hit_100: 0.0000
+2025-06-23 13:56:35,371 - RiskNICLP-5G - INFO - train.py:387 - 💾 Model saved to: logs/riskniclp_baseline_20250623_135627/final_model.pt
+2025-06-23 13:56:35,371 - RiskNICLP-5G - INFO - train.py:388 - ✅ Training completed successfully!
+2025-06-23 13:56:35,371 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed

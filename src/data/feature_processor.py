@@ -255,24 +255,62 @@ class FeatureProcessor:
         X: pd.DataFrame, 
         feature_mask: np.ndarray
     ) -> Tuple[pd.DataFrame, np.ndarray]:
-        """Apply domain knowledge-based feature selection"""
-        self.logger.logger.info("Applying domain knowledge selection")
+        """Apply domain knowledge-based feature selection (5G security whitelist)"""
+        self.logger.logger.info("Applying 5G security domain knowledge selection")
         
-        # Prioritize domain-relevant features
-        available_domain_features = [f for f in self.domain_features if f in X.columns]
-        other_features = [f for f in X.columns if f not in self.domain_features]
+        # Get 5G security feature whitelist
+        security_whitelist = self._get_security_whitelist()
         
-        # Select top domain features and fill remaining with others
-        if len(available_domain_features) >= self.target_dim:
-            selected_features = available_domain_features[:self.target_dim]
+        # Prioritize security-relevant features
+        available_security_features = [f for f in security_whitelist if f in X.columns]
+        other_features = [f for f in X.columns if f not in security_whitelist]
+        
+        self.logger.logger.info(f"Found {len(available_security_features)} security features in data")
+        
+        # Select top security features and fill remaining with others
+        if len(available_security_features) >= self.target_dim:
+            selected_features = available_security_features[:self.target_dim]
         else:
-            selected_features = available_domain_features + other_features[:self.target_dim - len(available_domain_features)]
+            # Prioritize security features, then add high-variance others
+            remaining_count = self.target_dim - len(available_security_features)
+            # Sort other features by variance (descending)
+            other_variances = [(f, X[f].var()) for f in other_features]
+            other_variances.sort(key=lambda x: x[1], reverse=True)
+            top_other_features = [f for f, _ in other_variances[:remaining_count]]
+            
+            selected_features = available_security_features + top_other_features
         
         X_selected = X[selected_features]
         
-        self.logger.logger.info(f"Domain selection kept {len(available_domain_features)} domain features")
+        self.logger.logger.info(f"Domain selection kept {len(available_security_features)} security features, {len(selected_features) - len(available_security_features)} additional features")
         
         return X_selected, feature_mask
+    
+    def _get_security_whitelist(self) -> List[str]:
+        """Get 5G network security feature whitelist"""
+        return [
+            # Core flow metrics
+            'TotPkts', 'TotBytes', 'SrcPkts', 'DstPkts', 
+            # Protocol and service indicators
+            'Proto', 'Sport', 'Dport', 'sTos', 'dTos',
+            # Temporal patterns (critical for attack detection)
+            'Dur', 'StartTime', 'LastTime',
+            # Statistical aggregations (anomaly detection)
+            'Mean', 'Sum', 'Min', 'Max', 'Std',
+            # Rate and throughput metrics
+            'Rate', 'SrcRate', 'DstRate', 
+            # Packet size patterns
+            'SrcBytes', 'DstBytes', 'sMaxPktSz', 'dMaxPktSz',
+            # Connection state and window features
+            'State', 'sWin', 'dWin',
+            # Jitter and timing features (DDoS indicators)
+            'SrcJitter', 'DstJitter',
+            # Activity patterns (APT detection)
+            'ActiveMin', 'ActiveMax', 'ActiveMean',
+            'IdleMin', 'IdleMax', 'IdleMean',
+            # Loss indicators (QoS attacks)
+            'Loss', 'pLoss', 'QLoss'
+        ]
     
     def _calculate_feature_importance(self, X: pd.DataFrame, y: Optional[np.ndarray]):
         """Calculate feature importance scores"""
@@ -579,42 +617,72 @@ class RiskVectorizer:
     @monitor_performance  
     def fit(self, risk_scores: np.ndarray) -> 'RiskVectorizer':
         """
-        Fit risk normalization and binning parameters
+        Fit risk normalization and 8-bin discretization parameters
         
         Args:
-            risk_scores: Raw risk scores array
+            risk_scores: Raw Risk-PPR scores array
             
         Returns:
             Self for method chaining
         """
-        self.logger.logger.info(f"Fitting risk vectorizer with {len(risk_scores)} samples")
+        self.logger.logger.info(f"Fitting risk vectorizer with {len(risk_scores)} samples using {self.normalization} normalization")
         
-        # Remove invalid values
-        valid_mask = np.isfinite(risk_scores)
+        # Validate and clean input
+        if not isinstance(risk_scores, np.ndarray):
+            risk_scores = np.array(risk_scores)
+        
+        # Remove invalid values (NaN, inf)
+        valid_mask = np.isfinite(risk_scores) & (risk_scores >= 0)
         valid_scores = risk_scores[valid_mask]
         
         if len(valid_scores) == 0:
             raise ValueError("No valid risk scores found")
         
-        # Calculate normalization parameters
+        if len(valid_scores) < self.num_bins:
+            self.logger.logger.warning(f"Only {len(valid_scores)} valid scores for {self.num_bins} bins")
+        
+        # Calculate normalization parameters based on method
         self.risk_mean = float(np.mean(valid_scores))
-        self.risk_std = float(np.std(valid_scores))
+        self.risk_std = float(np.std(valid_scores)) 
         self.risk_min = float(np.min(valid_scores))
         self.risk_max = float(np.max(valid_scores))
         
-        self.logger.logger.info(f"Risk score statistics: mean={self.risk_mean:.4f}, std={self.risk_std:.4f}")
+        # Ensure non-zero std for z-score normalization
+        if self.risk_std < 1e-6:
+            self.risk_std = 1.0
+            self.logger.logger.warning("Risk scores have near-zero variance, using std=1.0")
+        
+        self.logger.logger.info(f"Risk statistics: mean={self.risk_mean:.4f}, std={self.risk_std:.4f}, min={self.risk_min:.4f}, max={self.risk_max:.4f}")
         
         # Calculate binning parameters
         if self.adaptive_binning:
-            # Quantile-based adaptive binning
+            # Quantile-based adaptive binning for better distribution
             self.quantiles = np.quantile(valid_scores, np.linspace(0, 1, self.num_bins + 1))
             self.bin_edges = self.quantiles
+            self.logger.logger.info("Using adaptive quantile-based binning")
         else:
-            # Fixed binning based on normalized range
+            # Fixed binning on normalized range [0,1]
             normalized_scores = self._normalize_scores(valid_scores)
             self.bin_edges = np.linspace(0, 1, self.num_bins + 1)
+            self.logger.logger.info("Using fixed binning on normalized range")
         
-        self.logger.logger.info(f"Risk binning edges: {self.bin_edges}")
+        # Ensure bin edges are strictly increasing
+        if not np.all(np.diff(self.bin_edges) > 0):
+            # Handle edge case where bin edges are not strictly increasing
+            self.bin_edges = np.linspace(np.min(self.bin_edges), np.max(self.bin_edges), self.num_bins + 1)
+            self.logger.logger.warning("Adjusted bin edges to ensure strict monotonicity")
+        
+        self.logger.logger.info(f"Risk bin edges ({self.num_bins} bins): {self.bin_edges}")
+        
+        # Validate bin distribution
+        normalized_scores = self._normalize_scores(valid_scores)
+        bin_counts = np.histogram(normalized_scores, bins=self.bin_edges)[0]
+        self.logger.logger.info(f"Bin distribution: {bin_counts}")
+        
+        # Warn if bins are severely imbalanced
+        min_count, max_count = np.min(bin_counts), np.max(bin_counts)
+        if max_count > 0 and min_count / max_count < 0.1:
+            self.logger.logger.warning(f"Imbalanced bin distribution: min={min_count}, max={max_count}")
         
         return self
     

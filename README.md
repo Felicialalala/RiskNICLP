@@ -1,6 +1,8 @@
 # RiskNICLP-5G: Risk-aware Node-Importance Causal Link Prediction for 5G Intrusion Detection
 
-🚀 **基础版本已完成** - "能跑、能评、能扩展"的CPU优化模型实现
+🚀 **Phase 2 基础版本已完成** - "能跑、能评、能扩展"的CPU优化模型实现
+
+**最新更新 (2025-06-23)**: 图特征维度标准化修复完成，训练流程稳定运行
 
 ## 📋 项目概述
 
@@ -195,6 +197,7 @@ python train.py --resume logs/experiment_name/checkpoints/best_model.pt
 - [x] 模型架构实现
 - [x] 训练框架搭建
 - [x] 基础评估指标
+- [x] 图特征维度标准化修复 (2025-06-23)
 
 ### Phase 2: 性能优化
 - [ ] Risk-Bias注意力机制

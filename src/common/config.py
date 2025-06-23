@@ -21,6 +21,14 @@ from omegaconf import OmegaConf, DictConfig
 @dataclass
 class ModelConfig:
     """Model architecture configuration"""
+    # 异质图节点特征维度配置 (方案B)
+    node_feature_dims: Dict[str, int] = field(default_factory=lambda: {
+        'Alert': 9,   # Alert节点固定9维 (修复后)
+        'Flow': 17,   # Flow节点17维 (原始维度)  
+        'UE': 16      # UE节点16维 (原始维度)
+    })
+    
+    # 传统配置字段 (向后兼容)
     input_dim: int = 112
     feature_dim: int = 45
     hidden_dim: int = 64

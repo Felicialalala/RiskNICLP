@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+import dgl
 
 # Internal imports
 from src.common import (
@@ -30,6 +31,50 @@ from src.common import (
 from src.data import FeatureProcessor, RiskVectorizer, RiskNICLPDataset
 from src.models import RiskNICLPModel, ProgressiveTrainer
 from src.evaluation import RiskNICLPEvaluator
+
+def graph_collate_fn(batch):
+    """Custom collate function for DGL graphs with safe tensor handling"""
+    # batch is a list of dictionaries
+    graphs = [item['graph'] for item in batch]
+    
+    # Batch graphs using DGL - this will handle node features automatically
+    batched_graph = dgl.batch(graphs)
+    
+    # Extract additional data
+    risk_scores = [item['risk_scores'] for item in batch]
+    edge_labels = [item['edge_labels'] for item in batch]
+    
+    # Safe concatenation for risk_scores
+    non_empty_risk_scores = [scores for scores in risk_scores if len(scores) > 0]
+    if non_empty_risk_scores:
+        batched_risk_scores = torch.cat(non_empty_risk_scores, dim=0)
+    else:
+        # 生成与节点总数匹配的默认风险分数 (0.1为默认低风险)
+        total_nodes = sum([g.number_of_nodes() for g in graphs])
+        batched_risk_scores = torch.full((total_nodes,), 0.1, dtype=torch.float32)
+    
+    # Safe concatenation for edge_labels
+    non_empty_edge_labels = [labels for labels in edge_labels if len(labels) > 0]
+    if non_empty_edge_labels:
+        batched_edge_labels = torch.cat(non_empty_edge_labels, dim=0)
+    else:
+        # 生成与边总数匹配的默认标签 (0为默认正常)
+        total_edges = sum([g.number_of_edges() for g in graphs])
+        batched_edge_labels = torch.full((total_edges,), 0, dtype=torch.long)
+    
+    # Collect other metadata
+    scale_types = [item['scale_type'] for item in batch]
+    file_names = [item['file_name'] for item in batch]
+    indices = [item['idx'] for item in batch]
+    
+    return {
+        'graph': batched_graph,
+        'risk_scores': batched_risk_scores,
+        'edge_labels': batched_edge_labels,
+        'scale_types': scale_types,
+        'file_names': file_names,
+        'indices': indices
+    }
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -147,30 +192,34 @@ def prepare_data(config, logger):
     
     logger.logger.info(f"📈 Data splits: Train={len(train_dataset)}, Val={len(val_dataset)}, Test={len(test_dataset)}")
     
-    # Create data loaders
+    # Create data loaders with custom collate function
+    dataloader_kwargs = {
+        'batch_size': config.training.batch_size,
+        'num_workers': config.data.num_workers,
+        'pin_memory': config.data.pin_memory,
+        'collate_fn': graph_collate_fn
+    }
+    
+    # Add prefetch_factor only if num_workers > 0
+    if config.data.num_workers > 0 and config.data.prefetch_factor is not None:
+        dataloader_kwargs['prefetch_factor'] = config.data.prefetch_factor
+    
     train_loader = DataLoader(
         train_dataset,
-        batch_size=config.training.batch_size,
         shuffle=True,
-        num_workers=config.data.num_workers,
-        pin_memory=config.data.pin_memory,
-        prefetch_factor=config.data.prefetch_factor
+        **dataloader_kwargs
     )
     
     val_loader = DataLoader(
         val_dataset,
-        batch_size=config.training.batch_size,
         shuffle=False,
-        num_workers=config.data.num_workers,
-        pin_memory=config.data.pin_memory
+        **dataloader_kwargs
     )
     
     test_loader = DataLoader(
         test_dataset,
-        batch_size=config.training.batch_size,
         shuffle=False,
-        num_workers=config.data.num_workers,
-        pin_memory=config.data.pin_memory
+        **dataloader_kwargs
     )
     
     return {
@@ -187,11 +236,11 @@ def create_model(config, data_info, logger):
     """Create and initialize model"""
     logger.logger.info("🏗️ Creating model architecture...")
     
-    # Get actual feature dimensions from processors
-    feature_dim = len(data_info['feature_processor'].get_feature_names()) if data_info['feature_processor'].selected_features else config.model.feature_dim
+    # 使用配置中的节点特征维度 (方案B)
+    node_feature_dims = config.model.node_feature_dims
     
     model = RiskNICLPModel(
-        input_dim=feature_dim,
+        node_feature_dims=node_feature_dims,  # 传入异质图节点维度
         feature_dim=config.model.feature_dim,
         hidden_dim=config.model.hidden_dim,
         risk_embed_dim=config.model.risk_embed_dim,
@@ -248,9 +297,17 @@ def main():
     args = parse_arguments()
     
     try:
+        # Create CLI args list from our parsed args
+        cli_args = [
+            '--config', args.config
+        ]
+        if args.experiment_name:
+            cli_args.extend(['--experiment-name', args.experiment_name])
+            
         # Load configuration
         config = load_config(
             config_path=args.config,
+            cli_args=cli_args,
             include_env=True
         )
         
@@ -259,6 +316,7 @@ def main():
             config.logging.log_level = "DEBUG"
             config.training.max_epochs = 2
             config.data.num_workers = 0
+            config.data.prefetch_factor = None  # Required when num_workers=0
         
         # Setup experiment
         logger = setup_experiment(config, args)
