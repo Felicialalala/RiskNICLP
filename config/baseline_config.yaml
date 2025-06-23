@@ -1,0 +1,126 @@
+# RiskNICLP-5G Baseline Configuration
+# This configuration implements the "能跑、能评、能扩展" baseline model
+
+# Model Architecture
+model:
+  input_dim: 112               # Original feature dimension
+  feature_dim: 45              # Selected feature dimension
+  hidden_dim: 64               # Hidden layer dimension
+  risk_embed_dim: 16           # Risk embedding dimension
+  num_risk_bins: 8             # Risk discretization bins
+  num_heads: 4                 # GAT attention heads
+  num_layers: 2                # Number of GNN layers
+  dropout: 0.1                 # Dropout rate
+  temperature: 0.1             # Attention temperature
+  gravity_epsilon: 1e-3        # RiskGravity decoder epsilon
+
+# Training Configuration
+training:
+  batch_size: 4                # CPU-friendly batch size
+  accumulate_steps: 4          # Gradient accumulation for effective batch=16
+  max_epochs: 20               # Maximum training epochs
+  learning_rate: 1e-3          # Initial learning rate
+  weight_decay: 1e-4           # L2 regularization
+  direction_penalty_weight: 2.0 # λ_dir for directional loss
+  
+  # Progressive Training
+  basic_epochs: 5              # Basic GNN training epochs
+  risk_aware_epochs: 10        # Risk-aware training epochs
+  basic_auc_threshold: 0.80    # Threshold to switch to risk-aware
+  risk_recall_threshold: 0.75  # Risk recall threshold
+  
+  # Optimization
+  enable_bf16: true            # Enable bfloat16 for CPU acceleration
+  enable_gradient_checkpointing: true  # Memory-efficient training
+  gradient_clip_norm: 1.0      # Gradient clipping
+  
+  # Scheduler
+  scheduler_type: "cosine"     # Learning rate scheduler
+  warmup_epochs: 2             # Warmup epochs
+  eta_min_ratio: 0.01          # Minimum LR ratio
+
+# Data Configuration  
+data:
+  graph_dir: "data/processed/graphs"        # Graph data directory
+  cache_dir: "data/csr_cache"               # CSR cache directory
+  metadata_dir: "data/processed/metadata"   # Metadata directory
+  
+  # Data Splits
+  train_ratio: 0.8             # Training set ratio
+  val_ratio: 0.1               # Validation set ratio
+  test_ratio: 0.1              # Test set ratio
+  
+  # Data Loading
+  num_workers: 4               # DataLoader workers
+  pin_memory: true             # Pin memory for faster transfer
+  prefetch_factor: 2           # Prefetch factor
+  
+  # Feature Processing
+  feature_selection_method: "hybrid"  # Variance + correlation + domain
+  variance_threshold: 0.01     # Variance threshold
+  correlation_threshold: 0.9   # Correlation threshold
+  
+  # Risk Vectorization
+  risk_norm_method: "zscore_sigmoid"  # Risk normalization method
+  adaptive_binning: false      # Use fixed binning
+  
+  # Temporal Encoding
+  temporal_encoding:
+    enable: true               # Enable temporal encoding
+    method: "log_bin"          # Encoding method: "log_bin" or "random_fourier"
+    log_bins: 16               # Number of log bins for log_bin method
+    fourier_dim: 32            # Feature dimension for random_fourier method
+    fourier_sigma: 1.0         # Sigma parameter for random fourier features
+    time_features: ["StartTime", "LastTime", "Dur"]  # Time columns to encode
+    min_delta: 0.001           # Minimum time delta (seconds)
+    max_delta: 3600.0          # Maximum time delta (seconds)
+
+# Evaluation Configuration
+evaluation:
+  metrics:
+    - "auc"                    # Area Under ROC Curve
+    - "aupr"                   # Area Under Precision-Recall Curve
+    - "directional_hit_100"    # Directional Hit@100
+    - "mttd_30s"               # Mean Time To Detection (30s)
+    - "risk_weighted_precision" # Risk-weighted Precision
+    - "risk_weighted_recall"   # Risk-weighted Recall
+  save_predictions: true       # Save prediction results
+  save_attention_weights: true # Save attention weights for analysis
+  visualization: true          # Generate visualizations
+  confidence_interval: true    # Calculate confidence intervals
+  statistical_test: "bootstrap" # Statistical significance test
+  n_bootstrap: 1000            # Bootstrap samples
+
+# Logging and Monitoring
+logging:
+  log_level: "INFO"            # Logging level
+  log_dir: "logs"              # Log directory
+  
+  # Experiment Tracking
+  enable_wandb: true           # Enable Weights & Biases
+  enable_tensorboard: true     # Enable TensorBoard
+  wandb_project: "riskniclp-5g" # WandB project name
+  wandb_entity: null           # WandB entity (optional)
+  
+  # Monitoring
+  log_system_metrics: true     # Log system performance
+  system_metrics_interval: 100 # Log interval (steps)
+  save_checkpoints: true       # Save model checkpoints
+  checkpoint_interval: 500     # Checkpoint interval (steps)
+
+# Security and Privacy
+security:
+  enable_data_anonymization: true    # Anonymize sensitive data
+  hash_sensitive_fields: true        # Hash IP addresses etc.
+  log_data_access: true              # Log data access
+  max_log_retention_days: 30         # Log retention period
+
+# Runtime Configuration
+seed: 42                       # Random seed
+device: "cpu"                  # Training device
+num_threads: 8                 # CPU threads for PyTorch
+
+# Experiment Metadata
+experiment_name: null          # Experiment name (auto-generated if null)
+experiment_tags: []            # Experiment tags
+notes: "Baseline RiskNICLP-5G implementation with CPU optimization" 
