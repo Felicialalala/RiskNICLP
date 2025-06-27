@@ -1,22 +1,27 @@
 {
   "split": "test",
-  "timestamp": "2025-06-23 13:56:35",
+  "timestamp": "2025-06-27 12:48:48",
   "metrics": {
-    "p0_lead_time_mean": 0.0,
-    "p0_lead_time_std": 0.0,
-    "p0_mttd_30s": 16.7297306060791,
-    "p1_risk_weighted_precision": 0.0,
-    "p1_risk_weighted_recall": 0.0,
-    "p1_aupr": 0.5,
+    "p0_lead_time_mean": 1.3525835275650024,
+    "p0_lead_time_std": 0.5404611229896545,
+    "p0_mttd_30s": 30.0,
+    "p1_risk_weighted_precision": 0.008358101657140236,
+    "p1_risk_weighted_recall": 0.9999999882491407,
+    "p1_aupr": 0.003986186491255687,
     "p2_directional_hit_100": 1.0,
     "p2_direction_error_rate": 0.0,
-    "p3_auc": 0.5,
+    "p3_auc": 0.5199461811411237,
     "p3_hit_10": 0.0,
     "p3_hit_50": 0.0,
-    "p3_hit_100": 0.0
+    "p3_hit_100": 0.0,
+    "ns_sampling_balance_ratio": 0.004099458764267724,
+    "ns_negative_sample_quality": 0.4999980926513672,
+    "ns_positive_negative_separation": -4.172325134277344e-07,
+    "ns_sampling_diversity_score": 1.6681071429047734e-05,
+    "ns_overall_negative_sampling_score": 0.15123093353183337
   },
   "summary": {
-    "total_predictions": 20000,
+    "total_predictions": 37475,
     "model_info": {
       "parameters": "unknown",
       "device": "cpu"

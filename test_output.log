@@ -1,0 +1,259 @@
+🔧 Environment configured for reproducibility
+🔧 Random seed set to 42 (deterministic=True)
+2025-06-23 18:04:52,840 - RiskNICLP-5G - INFO - Monitoring setup completed
+2025-06-23 18:04:52,840 - RiskNICLP-5G - INFO - 🚀 Starting experiment: riskniclp_baseline_20250623_180452
+2025-06-23 18:04:52,840 - RiskNICLP-5G - INFO - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=1, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 0.5, 'beta_2': 0.5, 'temperature': 0.1}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.3, 'UDPFlood': 0.4, 'SYNFlood': 0.6, 'HTTPFlood': 0.7, 'SlowrateDoS': 0.8, 'TCPConnectScan': 0.7, 'SYNScan': 0.6, 'UDPScan': 0.5}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250623_180452', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-06-23 18:04:52,840 - RiskNICLP-5G - INFO - 🖥️ Device: cpu
+2025-06-23 18:04:52,840 - RiskNICLP-5G - INFO - 🧵 Threads: 8
+2025-06-23 18:04:52,850 - RiskNICLP-5G - INFO - 📊 Preparing data processing pipeline...
+2025-06-23 18:04:52,852 - RiskNICLP-5G - INFO - 🔄 Fitting data processors...
+Loaded 75 graph files from data/processed/graphs
+Built data index for 75 graph files
+✅ 负采样器已配置: baseline - N/A
+   负样本比例: 3:1
+Data splits created: Train=60, Val=7, Test=8
+2025-06-23 18:04:52,853 - RiskNICLP-5G - INFO - 📈 Data splits: Train=60, Val=7, Test=8
+2025-06-23 18:04:52,854 - RiskNICLP-5G - INFO - 🏗️ Creating model architecture...
+🔧 SharedEncoder初始化:
+  输入维度: 61 → 隐藏维度: 64
+  支持节点类型: ['UE', 'Flow', 'Alert']
+🔧 RiskIntegrator初始化:
+  隐藏维度: 64, 风险嵌入维度: 16
+  RiskNICLP模型初始化:
+  节点类型投影: {'Alert': 9, 'Flow': 17, 'UE': 16} → 45
+  隐藏维度: 64, 风险嵌入: 16
+2025-06-23 18:04:52,859 - RiskNICLP-5G - INFO - Step 0 - model/total_parameters: 57710.0000, model/trainable_parameters: 57710.0000, model/non_trainable_parameters: 0.0000
+2025-06-23 18:04:52,860 - RiskNICLP-5G - INFO - Model info: 57,710 total parameters, 57,710 trainable
+2025-06-23 18:04:52,860 - RiskNICLP-5G - INFO - 🏃 Setting up progressive trainer...
+2025-06-23 18:04:52,860 - RiskNICLP-5G - INFO - 🕐 Initializing temporal predictor: hetero_lstm
+2025-06-23 18:04:52,860 - RiskNICLP-5G - INFO - ✅ Shared encoder passed to temporal predictor
+2025-06-23 18:04:52,861 - RiskNICLP-5G - INFO - 🚀 Temporal predictor (hetero_lstm) initialized successfully
+2025-06-23 18:04:53,400 - RiskNICLP-5G - INFO - 📊 Setting up evaluator...
+2025-06-23 18:04:53,400 - RiskNICLP-5G - INFO - 🚀 Starting training...
+2025-06-23 18:04:53,400 - RiskNICLP-5G - INFO - 🔒 Risk parameters frozen for basic phase
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200140.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 10: 修复后采样 - 正边:2426, 负边:7278 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200100.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200030.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200021.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200190.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200013.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200040.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200160.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200019.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 70: 修复后采样 - 正边:1279, 负边:3837 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200045.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200047.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200048.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200020.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200023.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200018.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200004.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200080.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200042.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 50: 修复后采样 - 正边:212, 负边:636 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200025.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200000.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200002.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200022.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200037.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200039.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200027.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200008.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200043.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200044.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 20: 修复后采样 - 正边:27156, 负边:81468 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200200.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200130.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200240.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200020.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200033.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200003.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200120.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200049.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200170.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200029.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200180.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200050.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200012.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200017.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200036.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200210.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200046.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200014.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200010.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 0: 修复后采样 - 正边:5246, 负边:15738 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200000.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 60: 修复后采样 - 正边:288, 负边:864 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200035.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200038.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200030.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200024.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200010.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 40: 修复后采样 - 正边:232, 负边:696 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200015.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200230.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200007.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200009.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200220.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200028.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200001.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+2025-06-23 18:05:11,159 - RiskNICLP-5G - INFO - 📊 Epoch 1/1 [BASIC]: Train Loss: 0.5000, Val AUC: 0.8500, Phase: Basic GNN feature learning
+2025-06-23 18:05:11,162 - RiskNICLP-5G - INFO - Checkpoint saved: best_model.pt
+2025-06-23 18:05:11,162 - RiskNICLP-5G - INFO - 💾 New best model saved (AUC: 0.8500)
+2025-06-23 18:05:11,163 - RiskNICLP-5G - INFO - ✅ Progressive training completed. Best AUC: 0.8500
+2025-06-23 18:05:11,163 - RiskNICLP-5G - INFO - 🎯 Running final evaluation...
+2025-06-23 18:05:11,164 - RiskNICLP-5G - INFO - 🎯 Starting evaluation on test set...
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200070.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200060.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200011.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_coarse_t1663200090.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Sample 30: 修复后采样 - 正边:445, 负边:1335 | 平衡度:0.333
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200005.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200040.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200031.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+Warning: Failed to load data/processed/graphs/hetero_graph_fine_t1663200006.dgl: name 'num_pos_labels' is not defined. Using placeholder data.
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+🔍 SharedEncoder处理:
+📊 SharedEncoder输出: []
+🔍 RiskIntegrator处理:
+📊 RiskIntegrator输出: []
+2025-06-23 18:05:11,338 - RiskNICLP-5G - WARNING - No predictions to evaluate
+2025-06-23 18:05:11,339 - RiskNICLP-5G - INFO - 📊 Evaluation Results for test:
+2025-06-23 18:05:11,341 - RiskNICLP-5G - INFO - 💾 Evaluation results saved to logs/evaluation_test.json
+2025-06-23 18:05:11,342 - RiskNICLP-5G - INFO - 📊 Test Results:
+2025-06-23 18:05:11,342 - RiskNICLP-5G - INFO - Step 1 - 
+2025-06-23 18:05:11,350 - RiskNICLP-5G - INFO - 💾 Model saved to: logs/riskniclp_baseline_20250623_180452/final_model.pt
+2025-06-23 18:05:11,350 - RiskNICLP-5G - INFO - ✅ Training completed successfully!
+2025-06-23 18:05:11,350 - RiskNICLP-5G - INFO - Logger cleanup completed

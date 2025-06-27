@@ -18,10 +18,11 @@ from dgl.nn.pytorch import GATConv, SAGEConv
 import warnings
 
 from ..common.logger import get_logger
+from .risk_bias_attention import RiskBiasAttentionWrapper
 
 
 class RiskBiasGATConv(nn.Module):
-    """GAT with risk-bias attention mechanism"""
+    """GAT with risk-bias attention mechanism - updated to use new implementation"""
     
     def __init__(
         self,
@@ -31,26 +32,25 @@ class RiskBiasGATConv(nn.Module):
         feat_drop: float = 0.0,
         attn_drop: float = 0.0,
         residual: bool = True,
-        allow_zero_in_degree: bool = True
+        allow_zero_in_degree: bool = True,
+        risk_bias_method: str = 'simplified'  # Phase 2: 'simplified' or 'full'
     ):
         super().__init__()
         
         self.num_heads = num_heads
         self.out_feats = out_feats
+        self.risk_bias_method = risk_bias_method
         
-        # Base GAT layer
-        self.gat = GATConv(
+        # Use new risk bias attention wrapper
+        self.attention_layer = RiskBiasAttentionWrapper(
             in_feats=in_feats,
             out_feats=out_feats,
             num_heads=num_heads,
-            feat_drop=feat_drop,
-            attn_drop=attn_drop,
-            residual=residual,
-            allow_zero_in_degree=allow_zero_in_degree
+            dropout=feat_drop,
+            method=risk_bias_method
         )
         
-        # Risk bias parameters
-        self.risk_bias_transform = nn.Linear(1, num_heads)
+        # Edge type parameters for beta selection
         self.beta_1 = nn.Parameter(torch.tensor(1.0))  # UE→Flow bias weight
         self.beta_2 = nn.Parameter(torch.tensor(0.5))  # Flow→UE bias weight
         
@@ -59,15 +59,19 @@ class RiskBiasGATConv(nn.Module):
         
     def freeze_risk_params(self):
         """Freeze risk-related parameters"""
-        self.risk_bias_transform.requires_grad_(False)
         self.beta_1.requires_grad_(False)
         self.beta_2.requires_grad_(False)
+        # Freeze attention layer risk parameters
+        if hasattr(self.attention_layer.attention_layer, 'beta'):
+            self.attention_layer.attention_layer.beta.requires_grad_(False)
         
     def unfreeze_risk_params(self):
         """Unfreeze risk-related parameters"""
-        self.risk_bias_transform.requires_grad_(True)
         self.beta_1.requires_grad_(True)
         self.beta_2.requires_grad_(True)
+        # Unfreeze attention layer risk parameters
+        if hasattr(self.attention_layer.attention_layer, 'beta'):
+            self.attention_layer.attention_layer.beta.requires_grad_(True)
     
     def forward(
         self, 
@@ -82,41 +86,26 @@ class RiskBiasGATConv(nn.Module):
         Args:
             graph: DGL graph
             feat: Node features [N, in_feats]
-            risk_scores: Risk scores [N, 1] 
+            risk_scores: Risk scores [N] 
             edge_type: Edge type for beta selection
             
         Returns:
-            Output features [N, num_heads * out_feats] or [N, out_feats]
+            Output features [N, out_feats]
         """
         
-        # Standard GAT forward
-        if risk_scores is None:
-            return self.gat(graph, feat)
-        
-        # Compute risk bias
-        risk_bias = self.risk_bias_transform(risk_scores)  # [N, num_heads]
-        
-        # Select beta based on edge type
-        if edge_type == "ue_to_flow":
-            beta = self.beta_1
-        elif edge_type == "flow_to_ue":
-            beta = self.beta_2
+        # Apply edge-type specific risk scaling
+        if risk_scores is not None and edge_type:
+            if edge_type == "ue_to_flow":
+                scaled_risk = self.beta_1 * risk_scores
+            elif edge_type == "flow_to_ue":
+                scaled_risk = self.beta_2 * risk_scores
+            else:
+                scaled_risk = risk_scores
         else:
-            beta = 1.0
+            scaled_risk = risk_scores
             
-        # Apply risk bias to attention weights
-        # This is a simplified implementation - in practice would modify GAT attention computation
-        h = self.gat(graph, feat)
-        
-        # Apply risk bias as a multiplicative factor
-        if h.dim() == 3:  # Multi-head output [N, num_heads, out_feats]
-            risk_bias_expanded = risk_bias.unsqueeze(-1)  # [N, num_heads, 1]
-            h = h * (1 + beta * risk_bias_expanded)
-            h = h.mean(dim=1)  # Average heads: [N, out_feats]
-        else:  # Single head output [N, out_feats]
-            h = h * (1 + beta * risk_bias.mean(dim=-1, keepdim=True))
-            
-        return h
+        # Forward through attention layer
+        return self.attention_layer(graph, feat, scaled_risk)
 
 
 class UEEncoder(nn.Module):
@@ -446,14 +435,25 @@ class SharedEncoder(nn.Module):
         
         embeddings = {}
         
-        print(f"🔍 SharedEncoder处理:")
+        # 减少调试输出频率
+        if hasattr(self, '_debug_counter'):
+            self._debug_counter += 1
+        else:
+            self._debug_counter = 0
+            
+        # 只在特定条件下输出调试信息
+        debug_enabled = self._debug_counter % 100 == 0  # 每100次调用输出一次
+        
+        if debug_enabled:
+            print(f"🔍 SharedEncoder处理:")
         
         for ntype, features in node_features.items():
             if len(features) == 0:
                 embeddings[ntype] = torch.empty(0, self.hidden_dim)
                 continue
                 
-            print(f"  处理 {ntype}: {features.shape}")
+            if debug_enabled:
+                print(f"  处理 {ntype}: {features.shape}")
             
             # 1. 通用编码
             encoded = self.node_encoder(features)  # [N, hidden_dim]
@@ -463,11 +463,14 @@ class SharedEncoder(nn.Module):
                 adapted = self.type_adapters[ntype](encoded)
             else:
                 adapted = encoded
-                print(f"  ⚠️ 未找到 {ntype} 的适配器，使用通用编码")
+                if debug_enabled:
+                    print(f"  ⚠️ 未找到 {ntype} 的适配器，使用通用编码")
             
             embeddings[ntype] = adapted
-            print(f"  ✅ {ntype} 编码完成: {adapted.shape}")
+            if debug_enabled:
+                print(f"  ✅ {ntype} 编码完成: {adapted.shape}")
         
-        print(f"📊 SharedEncoder输出: {list(embeddings.keys())}")
+        if debug_enabled:
+            print(f"📊 SharedEncoder输出: {list(embeddings.keys())}")
         
         return embeddings 

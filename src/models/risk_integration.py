@@ -50,7 +50,17 @@ class RiskIntegrator(nn.Module):
             {节点类型: 风险增强嵌入}
         """
         
-        print(f"🔍 RiskIntegrator处理:")
+        # 减少调试输出频率
+        if hasattr(self, '_debug_counter'):
+            self._debug_counter += 1
+        else:
+            self._debug_counter = 0
+            
+        debug_enabled = self._debug_counter % 100 == 0  # 每100次调用输出一次
+        
+        if debug_enabled:
+            print(f"🔍 RiskIntegrator处理:")
+        
         risk_enhanced_embeddings = {}
         
         for ntype, embeddings in node_embeddings.items():
@@ -58,25 +68,30 @@ class RiskIntegrator(nn.Module):
                 risk_enhanced_embeddings[ntype] = embeddings
                 continue
                 
-            print(f"  处理 {ntype}: 嵌入{embeddings.shape}")
+            if debug_enabled:
+                print(f"  处理 {ntype}: 嵌入{embeddings.shape}")
             
             # 获取对应的风险分数
             if ntype in risk_scores and len(risk_scores[ntype]) > 0:
                 risk_vals = risk_scores[ntype]
-                print(f"    风险分数: {risk_vals.shape}")
+                if debug_enabled:
+                    print(f"    风险分数: {risk_vals.shape}")
                 
                 # 简单的风险增强：风险分数作为权重
                 risk_weights = torch.sigmoid(risk_vals).unsqueeze(-1)  # [N, 1]
                 enhanced = embeddings * (1.0 + risk_weights)  # 基于风险放大特征
                 
-                print(f"    ✅ 风险增强完成: {enhanced.shape}")
+                if debug_enabled:
+                    print(f"    ✅ 风险增强完成: {enhanced.shape}")
                 risk_enhanced_embeddings[ntype] = enhanced
             else:
                 # 无风险信息时直接传递
-                print(f"    ⚠️ 无风险信息，直接传递")
+                if debug_enabled:
+                    print(f"    ⚠️ 无风险信息，直接传递")
                 risk_enhanced_embeddings[ntype] = embeddings
         
-        print(f"📊 RiskIntegrator输出: {list(risk_enhanced_embeddings.keys())}")
+        if debug_enabled:
+            print(f"📊 RiskIntegrator输出: {list(risk_enhanced_embeddings.keys())}")
         
         return risk_enhanced_embeddings
         

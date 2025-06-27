@@ -139,6 +139,76 @@ class SecurityConfig:
 
 
 @dataclass
+class Phase2Config:
+    """Phase 2 enhancement configuration"""
+    # Risk-Bias Attention
+    risk_bias_attention: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': True,
+        'method': 'simplified',
+        'beta_1': 0.5,
+        'beta_2': 0.5,
+        'temperature': 0.1
+    })
+    
+    # Negative Sampling
+    negative_sampling: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': True,
+        'type': 'baseline',
+        'strategy': 'stratified',
+        'neg_ratio': 3,
+        'risk_thresholds': [0.8, 0.5, 0.2],
+        'hard_ratio': 0.3,
+        'seed': 42
+    })
+    
+    # Temporal Prediction
+    temporal_prediction: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': True,
+        'method': 'hetero_lstm',
+        'window_size': 5,
+        'stride': 1,
+        'future_steps': 3,
+        'lead_time_targets': [5, 10, 15],
+        'hetero_lstm': {
+            'spatial_encoder_reuse': True,
+            'graph_aggregation': 'mean_pool',
+            'lstm_layers': 1,
+            'bidirectional': False
+        },
+        'tgat_risk': {
+            'edge_level_modeling': True,
+            'risk_bias_temperature': 0.1,
+            'num_heads': 4,
+            'time_encoding_dim': 16
+        },
+        'graph_rnn': {
+            'node_level_generation': True,
+            'rnn_type': 'GRU',
+            'message_passing_steps': 3
+        }
+    })
+    
+    # Cross-Scale Context
+    cross_scale_context: Dict[str, Any] = field(default_factory=lambda: {
+        'enabled': True,
+        'fusion_method': 'gate'
+    })
+    
+    # Training Enhancements
+    training_enhancements: Dict[str, Any] = field(default_factory=lambda: {
+        'progressive': True,
+        'base_epochs': 20,
+        'risk_epochs': 30,
+        'scheduler': 'cosine',
+        'early_stopping': {
+            'enabled': True,
+            'patience': 10,
+            'min_delta': 0.001
+        }
+    })
+
+
+@dataclass
 class RiskNICLPConfig:
     """Complete RiskNICLP-5G configuration"""
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -147,6 +217,7 @@ class RiskNICLPConfig:
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     security: SecurityConfig = field(default_factory=SecurityConfig)
+    phase2: Phase2Config = field(default_factory=Phase2Config)
     
     # Runtime
     seed: int = 42

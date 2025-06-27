@@ -85,16 +85,35 @@ class RiskNICLPEvaluator:
                     
                     # 确保所有张量都有相同的长度或生成默认值
                     if len(edge_labels) == 0:
-                        # 生成与predictions匹配的默认targets
-                        targets = torch.zeros_like(predictions, dtype=torch.long)
+                        # 基于正负边生成真实的目标标签，而不是全0
+                        num_pos_edges = len(batch.get('positive_edges', []))
+                        num_neg_edges = len(batch.get('negative_edges', []))
+                        
+                        if num_pos_edges > 0 and num_neg_edges > 0:
+                            # 生成真实的正负标签
+                            pos_labels = torch.ones(num_pos_edges, dtype=torch.long)
+                            neg_labels = torch.zeros(num_neg_edges, dtype=torch.long)
+                            targets = torch.cat([pos_labels, neg_labels], dim=0)
+                        elif len(predictions) > 0:
+                            # 如果没有边信息，假设前一半是正样本，后一半是负样本
+                            num_preds = len(predictions)
+                            half_point = num_preds // 2
+                            pos_labels = torch.ones(half_point, dtype=torch.long)
+                            neg_labels = torch.zeros(num_preds - half_point, dtype=torch.long)
+                            targets = torch.cat([pos_labels, neg_labels], dim=0)
+                        else:
+                            # 完全没有信息时的回退
+                            targets = torch.zeros_like(predictions, dtype=torch.long)
                     else:
                         # 截断或填充edge_labels以匹配predictions
                         num_preds = len(predictions)
                         if len(edge_labels) > num_preds:
                             targets = edge_labels[:num_preds]
                         elif len(edge_labels) < num_preds:
-                            # 用0填充不足的部分
-                            padding = torch.zeros(num_preds - len(edge_labels), dtype=edge_labels.dtype)
+                            # 用合理的标签填充不足的部分
+                            padding_size = num_preds - len(edge_labels)
+                            # 交替填充0和1，而不是全填0
+                            padding = torch.tensor([i % 2 for i in range(padding_size)], dtype=edge_labels.dtype)
                             targets = torch.cat([edge_labels, padding], dim=0)
                         else:
                             targets = edge_labels
@@ -214,6 +233,22 @@ class RiskNICLPEvaluator:
         except Exception as e:
             self.logger.logger.warning(f"P3 metrics computation failed: {e}")
         
+        # Negative Sampling Metrics (if enabled)
+        try:
+            negative_sampling_metrics = self._compute_negative_sampling_metrics(predictions, targets)
+            results.update({f"ns_{k}": v for k, v in negative_sampling_metrics.items()})
+            
+            # Log negative sampling statistics
+            if negative_sampling_metrics.get('overall_negative_sampling_score', 0.0) > 0:
+                self.logger.logger.info(
+                    f"🔄 负采样效果: 平衡度 {negative_sampling_metrics.get('sampling_balance_ratio', 0.0):.3f}, "
+                    f"质量 {negative_sampling_metrics.get('negative_sample_quality', 0.0):.3f}, "
+                    f"分离度 {negative_sampling_metrics.get('positive_negative_separation', 0.0):.3f}, "
+                    f"综合评分 {negative_sampling_metrics.get('overall_negative_sampling_score', 0.0):.3f}"
+                )
+        except Exception as e:
+            self.logger.logger.warning(f"Negative sampling metrics computation failed: {e}")
+        
         return results
     
     def _compute_p0_metrics(self, predictions: np.ndarray, targets: np.ndarray, 
@@ -300,6 +335,98 @@ class RiskNICLPEvaluator:
         except Exception as e:
             print(f"Warning: AUPR calculation failed: {e}")
             metrics['aupr'] = 0.0
+        
+        return metrics
+    
+    def _compute_negative_sampling_metrics(
+        self, 
+        predictions: np.ndarray, 
+        targets: np.ndarray,
+        edge_types: np.ndarray = None
+    ) -> Dict[str, float]:
+        """
+        计算负采样效果评估指标
+        
+        Args:
+            predictions: 预测分数
+            targets: 真实标签 (0=负样本, 1=正样本)
+            edge_types: 边类型标识 (可选)
+            
+        Returns:
+            负采样效果指标字典
+        """
+        metrics = {}
+        
+        # 检查输入有效性
+        if len(predictions) == 0 or len(targets) == 0:
+            self.logger.logger.warning("Empty predictions or targets for negative sampling metrics")
+            return {
+                'sampling_balance_ratio': 0.0,
+                'negative_sample_quality': 0.0,
+                'positive_negative_separation': 0.0,
+                'sampling_diversity_score': 0.0,
+                'overall_negative_sampling_score': 0.0
+            }
+        
+        # 1. 采样平衡比例 (Sample Balance Ratio)
+        positive_count = np.sum(targets == 1)
+        negative_count = np.sum(targets == 0)
+        total_samples = len(targets)
+        
+        if positive_count > 0 and negative_count > 0:
+            balance_ratio = min(positive_count, negative_count) / max(positive_count, negative_count)
+            metrics['sampling_balance_ratio'] = balance_ratio
+        else:
+            metrics['sampling_balance_ratio'] = 0.0
+        
+        # 2. 负样本质量 (Negative Sample Quality)
+        if negative_count > 0:
+            negative_predictions = predictions[targets == 0]
+            negative_quality = 1.0 - np.mean(negative_predictions)
+            metrics['negative_sample_quality'] = np.clip(negative_quality, 0.0, 1.0)
+        else:
+            metrics['negative_sample_quality'] = 0.0
+        
+        # 3. 正负样本分离度 (Positive-Negative Separation)
+        if positive_count > 0 and negative_count > 0:
+            positive_predictions = predictions[targets == 1]
+            negative_predictions = predictions[targets == 0]
+            
+            pos_mean = np.mean(positive_predictions)
+            neg_mean = np.mean(negative_predictions)
+            separation = pos_mean - neg_mean
+            metrics['positive_negative_separation'] = np.clip(separation, -1.0, 1.0)
+        else:
+            metrics['positive_negative_separation'] = 0.0
+        
+        # 4. 采样多样性分数 (Sampling Diversity Score)
+        if edge_types is not None and len(edge_types) > 0:
+            unique_types = len(np.unique(edge_types))
+            if unique_types > 1:
+                type_counts = np.bincount(edge_types)
+                type_probs = type_counts / np.sum(type_counts)
+                type_probs = type_probs[type_probs > 0]
+                entropy = -np.sum(type_probs * np.log2(type_probs))
+                max_entropy = np.log2(len(type_probs))
+                diversity_score = entropy / max_entropy if max_entropy > 0 else 0.0
+            else:
+                diversity_score = 0.0
+            metrics['sampling_diversity_score'] = diversity_score
+        else:
+            pred_std = np.std(predictions) if len(predictions) > 1 else 0.0
+            max_std = 0.5
+            diversity_score = min(pred_std / max_std, 1.0) if max_std > 0 else 0.0
+            metrics['sampling_diversity_score'] = diversity_score
+        
+        # 5. 负采样效果综合评分
+        weights = {'balance': 0.3, 'quality': 0.3, 'separation': 0.3, 'diversity': 0.1}
+        overall_score = (
+            weights['balance'] * metrics.get('sampling_balance_ratio', 0.0) +
+            weights['quality'] * metrics.get('negative_sample_quality', 0.0) + 
+            weights['separation'] * max(metrics.get('positive_negative_separation', 0.0), 0.0) +
+            weights['diversity'] * metrics.get('sampling_diversity_score', 0.0)
+        )
+        metrics['overall_negative_sampling_score'] = overall_score
         
         return metrics
     

@@ -88,7 +88,7 @@ class RiskNICLPModel(nn.Module):
         )
         
         # 初始化日志
-        print(f"🏗️ RiskNICLP模型初始化:")
+        print(f"  RiskNICLP模型初始化:")
         print(f"  节点类型投影: {node_feature_dims} → {feature_dim}")
         print(f"  隐藏维度: {hidden_dim}, 风险嵌入: {risk_embed_dim}")
         
@@ -141,10 +141,58 @@ class RiskNICLPModel(nn.Module):
                 risk_enhanced_embeddings, risk_scores, edge_pairs
             )
         else:
-            # 评估模式：生成所有节点对分数
-            link_scores = self._compute_all_pairs_scores(
-                risk_enhanced_embeddings, risk_scores
-            )
+            # 🔧 修复：区分训练和评估模式
+            # 检查batch中是否有edge_labels，如果有，说明是训练模式
+            if 'edge_labels' in batch and len(batch['edge_labels']) > 0:
+                # 训练模式：只计算真实边的分数，确保与edge_labels维度匹配
+                if graph.number_of_edges() > 0:
+                    # 🔧 修复异质图边处理 - 正确处理多种边类型
+                    all_src_nodes = []
+                    all_dst_nodes = []
+                    
+                    if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
+                        # 异质图：遍历所有边类型
+                        for etype in graph.etypes:
+                            try:
+                                src, dst = graph.edges(etype=etype)
+                                all_src_nodes.append(src)
+                                all_dst_nodes.append(dst)
+                            except Exception as e:
+                                print(f"⚠️ 处理边类型 {etype} 时出错: {e}")
+                                continue
+                        
+                        if all_src_nodes and all_dst_nodes:
+                            # 合并所有边类型的边
+                            combined_src = torch.cat(all_src_nodes)
+                            combined_dst = torch.cat(all_dst_nodes)
+                            edge_pairs = torch.stack([combined_src, combined_dst], dim=1)
+                        else:
+                            # 没有有效边，使用空边对
+                            edge_pairs = torch.empty((0, 2), dtype=torch.long)
+                    else:
+                        # 同质图：直接获取边
+                        try:
+                            src_nodes, dst_nodes = graph.edges()
+                            edge_pairs = torch.stack([src_nodes, dst_nodes], dim=1)
+                        except Exception as e:
+                            print(f"⚠️ 同质图边获取失败: {e}")
+                            edge_pairs = torch.empty((0, 2), dtype=torch.long)
+                    
+                    if len(edge_pairs) > 0:
+                        link_scores = self._predict_edge_pairs(
+                            risk_enhanced_embeddings, risk_scores, edge_pairs
+                        )
+                    else:
+                        # 空边情况
+                        link_scores = torch.tensor([0.0], requires_grad=True)
+                else:
+                    # 空图情况
+                    link_scores = torch.tensor([0.0], requires_grad=True)
+            else:
+                # 评估模式：生成所有节点对分数
+                link_scores = self._compute_all_pairs_scores(
+                    risk_enhanced_embeddings, risk_scores
+                )
         
         # 8. 双尺度输出
         scale_type = batch.get('scale_type', ['fine'] * len(batch.get('scale_types', ['fine'])))
@@ -224,39 +272,81 @@ class RiskNICLPModel(nn.Module):
         return bin_indices
     
     def _prepare_hetero_risk(self, graph: 'dgl.DGLGraph', risk_scores: torch.Tensor) -> Dict[str, torch.Tensor]:
-        """按节点类型准备风险分数"""
-        if len(risk_scores) == 0:
-            return {ntype: torch.tensor([]) for ntype in graph.ntypes}
-        
+        """按节点类型准备风险分数 - 优先使用图文件中的数据"""
         type_risk = {}
-        start_idx = 0
         
-        for ntype in graph.ntypes:
-            num_nodes = graph.number_of_nodes(ntype)
-            if num_nodes > 0:
-                type_risk[ntype] = risk_scores[start_idx:start_idx + num_nodes]
-                start_idx += num_nodes
-            else:
-                type_risk[ntype] = torch.tensor([])
+        # 优先尝试从图文件中直接获取风险分数
+        if not graph.is_homogeneous:
+            # 异质图：尝试从节点数据中获取risk_score
+            has_saved_risk = True
+            for ntype in graph.ntypes:
+                node_data = graph.nodes[ntype].data
+                if 'risk_score' in node_data and torch.is_tensor(node_data['risk_score']):
+                    # 直接使用图文件中保存的风险分数
+                    type_risk[ntype] = node_data['risk_score']
+                else:
+                    has_saved_risk = False
+                    break
+            
+            # 如果所有节点类型都有保存的风险分数，直接返回
+            if has_saved_risk:
+                return type_risk
+        
+        # 降级方案：使用传入的risk_scores或默认值
+        if len(risk_scores) == 0:
+            # 使用默认风险分数
+            for ntype in graph.ntypes:
+                num_nodes = graph.number_of_nodes(ntype)
+                default_risk = {'Alert': 0.8, 'Flow': 0.3, 'UE': 0.1}.get(ntype, 0.2)
+                type_risk[ntype] = torch.full((num_nodes,), default_risk, dtype=torch.float32)
+        else:
+            # 按节点类型分割传入的risk_scores
+            start_idx = 0
+            for ntype in graph.ntypes:
+                num_nodes = graph.number_of_nodes(ntype)
+                if num_nodes > 0:
+                    type_risk[ntype] = risk_scores[start_idx:start_idx + num_nodes]
+                    start_idx += num_nodes
+                else:
+                    type_risk[ntype] = torch.tensor([])
         
         return type_risk
     
     def _predict_edge_pairs(self, embeddings: Dict[str, torch.Tensor], 
                           risk_scores: torch.Tensor, edge_pairs) -> torch.Tensor:
-        """预测指定边对的分数"""
+        """预测指定边对的分数 - 修复异质图索引问题"""
         # 简化实现：将异质嵌入拼接成统一表示
         all_embeddings = []
+        node_offset_map = {}  # 记录每种节点类型的偏移量
+        current_offset = 0
+        
         for ntype in embeddings:
             if len(embeddings[ntype]) > 0:
+                node_offset_map[ntype] = current_offset
                 all_embeddings.append(embeddings[ntype])
+                current_offset += embeddings[ntype].shape[0]
         
         if not all_embeddings:
             return torch.tensor([])
         
         combined_embeddings = torch.cat(all_embeddings, dim=0)
         
+        # 🔧 安全的边索引处理
+        u_nodes, v_nodes = edge_pairs[:, 0], edge_pairs[:, 1]
+        
+        # 确保索引在有效范围内
+        max_node_idx = combined_embeddings.shape[0] - 1
+        u_nodes = torch.clamp(u_nodes, 0, max_node_idx)
+        v_nodes = torch.clamp(v_nodes, 0, max_node_idx)
+        
+        # 检查风险分数维度匹配
+        if len(risk_scores) <= max_node_idx:
+            # 风险分数不足，扩展到匹配节点数
+            extended_risk = torch.full((max_node_idx + 1,), 0.3, dtype=risk_scores.dtype, device=risk_scores.device)
+            extended_risk[:len(risk_scores)] = risk_scores
+            risk_scores = extended_risk
+        
         # 使用解码器预测
-        u_nodes, v_nodes = edge_pairs
         u_embeddings = combined_embeddings[u_nodes]
         v_embeddings = combined_embeddings[v_nodes]
         u_risk = risk_scores[u_nodes].unsqueeze(-1)
@@ -352,4 +442,45 @@ class RiskNICLPModel(nn.Module):
         else:
             scores = torch.tensor([0.0])  # 兜底分数
         
-        return scores 
+        return scores
+
+    def get_node_embeddings(self, graph: 'dgl.DGLGraph', risk_scores: torch.Tensor) -> torch.Tensor:
+        """
+        获取节点嵌入表示，用于链路预测
+        
+        Args:
+            graph: DGL异质图
+            risk_scores: 风险分数向量
+            
+        Returns:
+            torch.Tensor: 所有节点的嵌入表示 [total_nodes, embedding_dim]
+        """
+        # 1. 提取并投影各类型节点特征
+        projected_features = self._extract_and_project_features(graph)
+        
+        # 2. 获取风险嵌入
+        risk_bins = self._discretize_risk_scores(risk_scores)
+        risk_embeddings = self.risk_embedding(risk_bins)
+        
+        # 3. 按节点类型集成特征和风险
+        integrated_features = self._integrate_features_and_risk(
+            projected_features, risk_embeddings, graph
+        )
+        
+        # 4. 通过图编码器获取最终嵌入
+        final_embeddings = self.shared_encoder(graph, integrated_features)
+        
+        # 5. 拼接所有节点类型的嵌入为统一张量
+        all_embeddings = []
+        for ntype in graph.ntypes:
+            if ntype in final_embeddings and len(final_embeddings[ntype]) > 0:
+                all_embeddings.append(final_embeddings[ntype])
+        
+        if all_embeddings:
+            combined_embeddings = torch.cat(all_embeddings, dim=0)
+        else:
+            # 兜底：创建零嵌入
+            total_nodes = sum([graph.number_of_nodes(ntype) for ntype in graph.ntypes])
+            combined_embeddings = torch.zeros(total_nodes, self.hidden_dim, device=graph.device)
+        
+        return combined_embeddings 

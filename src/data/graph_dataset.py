@@ -10,12 +10,13 @@ from typing import Optional, Tuple, Dict, Any, List
 from pathlib import Path
 import dgl
 import numpy as np
+from .negative_sampler import BaselineNegativeSampler, RiskAwareNegativeSampler, create_negative_sampler
 
 
 class RiskNICLPDataset(Dataset):
     """RiskNICLP-5G Dataset class"""
     
-    def __init__(self, graph_dir: str, metadata_dir: str, feature_processor, risk_vectorizer, cache_manager=None):
+    def __init__(self, graph_dir: str, metadata_dir: str, feature_processor, risk_vectorizer, cache_manager=None, negative_sampler_config=None):
         """
         Initialize dataset
         
@@ -25,12 +26,20 @@ class RiskNICLPDataset(Dataset):
             feature_processor: Feature processor instance
             risk_vectorizer: Risk vectorizer instance
             cache_manager: Cache manager (optional)
+            negative_sampler_config: Configuration for negative sampling
         """
         self.graph_dir = graph_dir
         self.metadata_dir = metadata_dir
         self.feature_processor = feature_processor
         self.risk_vectorizer = risk_vectorizer
         self.cache_manager = cache_manager
+        
+        # Initialize negative sampler
+        if negative_sampler_config is None:
+            # Default baseline negative sampler
+            negative_sampler_config = {'type': 'baseline', 'neg_ratio': 3}
+        self.negative_sampler = create_negative_sampler(negative_sampler_config)
+        self.negative_sampler_config = negative_sampler_config
         
         # Initialize data storage
         self.graph_files = None
@@ -43,6 +52,9 @@ class RiskNICLPDataset(Dataset):
         
         # Build data index mapping
         self._build_data_index()
+        
+        # Validate negative sampler configuration
+        self._validate_negative_sampler()
         
     def _load_graph_files(self):
         """Load 75 DGL graph files from graph directory"""
@@ -86,6 +98,110 @@ class RiskNICLPDataset(Dataset):
             }
             
         print(f"Built data index for {len(self.data_index)} graph files")
+    
+    def _validate_negative_sampler(self):
+        """验证负采样器与图数据的兼容性"""
+        if self.negative_sampler is None:
+            print("Warning: No negative sampler configured. Using default baseline sampler.")
+            self.negative_sampler = create_negative_sampler({'type': 'baseline', 'neg_ratio': 3})
+            
+        # 记录采样器配置
+        config = self.negative_sampler.get_config()
+        print(f"✅ 负采样器已配置: {config['type']} - {config.get('strategy', 'N/A')}")
+        print(f"   负样本比例: {config['neg_ratio']}:1")
+        
+        if config['type'] == 'risk_aware':
+            print(f"   风险阈值: {config['risk_thresholds']}")
+            print(f"   困难样本比例: {config['hard_ratio']}")
+            if hasattr(self.negative_sampler, 'attack_type_mapping'):
+                print(f"   攻击类型映射: {len(self.negative_sampler.attack_type_mapping)} 种攻击类型")
+    
+    def _generate_positive_negative_edges(self, graph, edge_labels, risk_scores, graph_file=None):
+        """
+        Extract positive and negative edge samples based on authoritative edge labels
+        
+        🔧 修复：完全使用传入的edge_labels，不再重新生成标签
+        
+        Args:
+            graph: DGL graph
+            edge_labels: Authoritative edge labels from __getitem__ (权威边标签)
+            risk_scores: Node risk scores (for negative sampling only)
+            
+        Returns:
+            Tuple of (positive_edges, negative_edges)
+        """
+        # 🛡️ 严格验证：确保edge_labels长度与边数匹配
+        num_edges = graph.number_of_edges()
+        if len(edge_labels) != num_edges:
+            raise ValueError(f"❌ edge_labels长度{len(edge_labels)}与图边数{num_edges}不匹配")
+        
+        # Extract all edges from graph
+        if graph.is_homogeneous:
+            # Homogeneous graph
+            src, dst = graph.edges()
+            all_edges = torch.stack([src, dst], dim=1)
+        else:
+            # Heterogeneous graph - collect all edges
+            all_edges_list = []
+            for etype in graph.etypes:
+                src, dst = graph.edges(etype=etype)
+                if len(src) > 0:
+                    edges = torch.stack([src, dst], dim=1)
+                    all_edges_list.append(edges)
+            
+            if all_edges_list:
+                all_edges = torch.cat(all_edges_list, dim=0)
+            else:
+                all_edges = torch.empty((0, 2), dtype=torch.long)
+        
+        # 🔧 关键修复：严格使用传入的权威edge_labels
+        if len(edge_labels) > 0 and len(all_edges) > 0:
+            # 提取正样本边：基于权威标签edge_labels==1
+            positive_mask = edge_labels == 1
+            positive_edges = all_edges[positive_mask]
+            
+            from pathlib import Path
+            print(f"✅ 正样本边提取: 文件={Path(graph_file).name if graph_file else 'Unknown'}, "
+                  f"正边={len(positive_edges)}/{len(all_edges)} ({len(positive_edges)/len(all_edges)*100:.1f}%)")
+        else:
+            positive_edges = torch.empty((0, 2), dtype=torch.long)
+        
+        # Generate negative edges using sampler
+        if len(positive_edges) > 0:
+            try:
+                negative_edges = self.negative_sampler.sample_negatives(
+                    graph, positive_edges, risk_scores
+                )
+            except Exception as e:
+                print(f"Warning: Negative sampling failed: {e}. Using fallback.")
+                # Fallback to simple negative sampling
+                num_neg = len(positive_edges) * self.negative_sampler_config.get('neg_ratio', 3)
+                num_nodes = graph.number_of_nodes()
+                
+                # Generate random negative edges avoiding positive ones
+                positive_edge_set = set()
+                for i in range(len(positive_edges)):
+                    src, dst = positive_edges[i].tolist()
+                    positive_edge_set.add((src, dst))
+                    positive_edge_set.add((dst, src))
+                
+                neg_edges = []
+                max_attempts = num_neg * 10
+                attempts = 0
+                
+                while len(neg_edges) < num_neg and attempts < max_attempts:
+                    src = torch.randint(0, num_nodes, (1,)).item()
+                    dst = torch.randint(0, num_nodes, (1,)).item()
+                    
+                    if src != dst and (src, dst) not in positive_edge_set:
+                        neg_edges.append([src, dst])
+                    attempts += 1
+                
+                negative_edges = torch.tensor(neg_edges, dtype=torch.long) if neg_edges else torch.empty((0, 2), dtype=torch.long)
+        else:
+            negative_edges = torch.empty((0, 2), dtype=torch.long)
+            
+        return positive_edges, negative_edges
         
     def create_splits(self, train_ratio: float = 0.8, val_ratio: float = 0.1, test_ratio: float = 0.1, seed: int = 42) -> Tuple['RiskNICLPDataset', 'RiskNICLPDataset', 'RiskNICLPDataset']:
         """
@@ -132,109 +248,242 @@ class RiskNICLPDataset(Dataset):
             graphs, labels = dgl.load_graphs(str(graph_file))
             graph = graphs[0]  # Assume single graph per file
             
-            # Generate synthetic risk scores if not available
-            risk_scores = torch.tensor([])  # Default empty
-            if 'risk_score' in graph.ndata:
-                # Extract from global node data (homogeneous graph)
-                risk_scores = graph.ndata['risk_score']
-            else:
-                # Check heterogeneous node data
-                all_risk_scores = []
-                for ntype in graph.ntypes:
-                    if 'risk_score' in graph.nodes[ntype].data:
-                        all_risk_scores.append(graph.nodes[ntype].data['risk_score'])
-                        
-                if all_risk_scores:
-                    risk_scores = torch.cat(all_risk_scores, dim=0)
+            # Generate synthetic risk scores if not available - 修复异质图类型错误
+            # 🛡️ 先按图类型区分：同构图直接取，异质图按节点类型拼接
+            if graph.is_homogeneous:
+                # 同构图：直接从graph.ndata获取
+                if 'risk_score' in graph.ndata and torch.is_tensor(graph.ndata['risk_score']):
+                    risk_scores = graph.ndata['risk_score']
                 else:
-                    # 生成与节点总数匹配的合成风险分数
-                    total_nodes = sum([graph.number_of_nodes(ntype) for ntype in graph.ntypes])
-                    # 根据节点类型生成不同的默认风险分数
-                    node_risks = []
-                    for ntype in graph.ntypes:
-                        num_nodes = graph.number_of_nodes(ntype)
-                        if ntype == 'Alert':
-                            # Alert节点高风险
-                            default_risk = 0.8
-                        elif ntype == 'Flow':
-                            # Flow节点中等风险
-                            default_risk = 0.3
-                        elif ntype == 'UE':
-                            # UE节点低风险
-                            default_risk = 0.1
+                    # 同构图上也没有risk_score，使用默认值0.3
+                    N = graph.number_of_nodes()
+                    risk_scores = torch.full((N,), 0.3, dtype=torch.float32)
+            else:
+                # 异质图：优先使用图文件中保存的risk_score
+                parts = []
+                for ntype in graph.ntypes:
+                    try:
+                        node_data = graph.nodes[ntype].data
+                        if 'risk_score' in node_data:
+                            risk_tensor = node_data['risk_score']
+                            if torch.is_tensor(risk_tensor):
+                                # 使用图文件中保存的风险分数
+                                parts.append(risk_tensor)
+                            else:
+                                print(f"⚠️ {ntype} 节点的risk_score不是tensor: {type(risk_tensor)}")
+                                # 创建默认风险分数
+                                default_risk = {'Alert': 0.8, 'Flow': 0.3, 'UE': 0.1}.get(ntype, 0.2)
+                                num_nodes = graph.number_of_nodes(ntype)
+                                parts.append(torch.full((num_nodes,), default_risk, dtype=torch.float32))
                         else:
-                            # 其他节点类型
-                            default_risk = 0.2
-                        
-                        node_risks.append(torch.full((num_nodes,), default_risk, dtype=torch.float32))
-                    
-                    if node_risks:
-                        risk_scores = torch.cat(node_risks, dim=0)
-                    else:
-                        risk_scores = torch.tensor([0.1])  # 最小兜底
-                    
-            # Generate synthetic edge labels if not available
-            edge_labels = torch.tensor([])  # Default empty
-            if 'label' in graph.edata:
-                # Extract from global edge data (homogeneous graph)
+                            # 降级方案：使用各节点类型的默认值
+                            default_risk = {'Alert': 0.8, 'Flow': 0.3, 'UE': 0.1}.get(ntype, 0.2)
+                            num_nodes = graph.number_of_nodes(ntype)
+                            parts.append(torch.full((num_nodes,), default_risk, dtype=torch.float32))
+                    except Exception as e:
+                        print(f"⚠️ 处理 {ntype} 节点数据时出错: {e}")
+                        # 兜底处理
+                        default_risk = {'Alert': 0.8, 'Flow': 0.3, 'UE': 0.1}.get(ntype, 0.2)
+                        num_nodes = graph.number_of_nodes(ntype)
+                        parts.append(torch.full((num_nodes,), default_risk, dtype=torch.float32))
+                
+                if parts:
+                    risk_scores = torch.cat(parts, dim=0)
+                else:
+                    # 兜底：如果没有任何节点类型，创建最小默认值
+                    risk_scores = torch.tensor([0.3], dtype=torch.float32)
+            
+            # 🛡️ 强制类型检查和断言 - 确保risk_scores格式正确
+            if not torch.is_tensor(risk_scores):
+                raise RuntimeError(f"❌ risk_scores必须是tensor，但得到: {type(risk_scores)}")
+            
+            if risk_scores.dim() != 1:
+                raise RuntimeError(f"❌ risk_scores必须是1维tensor，但形状为: {risk_scores.shape}")
+            
+            # 确保数据类型为float32
+            if risk_scores.dtype != torch.float32:
+                risk_scores = risk_scores.float()
+            
+            # Extract existing edge labels from graph data with improved logic
+            edge_labels = torch.tensor([])
+            
+            # 🔧 修复判断逻辑：优先检查图类型而非edata中是否有label
+            if graph.is_homogeneous and 'label' in graph.edata:
+                # Extract from global edge data (homogeneous graph only)
                 edge_labels = graph.edata['label']
+                if torch.is_tensor(edge_labels):
+                    print(f"🔍 从同质图提取边标签: {edge_labels.shape}")
+                else:
+                    print(f"⚠️ 同质图边标签非tensor: {type(edge_labels)}, 将跳过到后续处理")
+                    edge_labels = torch.tensor([])  # 重置为空tensor，让后续逻辑处理
             else:
                 # Check heterogeneous edge data
                 all_edge_labels = []
                 for etype in graph.etypes:
                     if 'label' in graph.edges[etype].data:
-                        all_edge_labels.append(graph.edges[etype].data['label'])
+                        etype_labels = graph.edges[etype].data['label']
+                        if torch.is_tensor(etype_labels):
+                            all_edge_labels.append(etype_labels)
+                            print(f"🔍 从异质图 {etype} 提取边标签: {etype_labels.shape}")
+                        else:
+                            print(f"⚠️ 异质图 {etype} 边标签非tensor: {type(etype_labels)}")
                         
                 if all_edge_labels:
                     edge_labels = torch.cat(all_edge_labels, dim=0)
+                    print(f"🔍 合并异质图边标签: {edge_labels.shape}")
                 else:
-                    # 生成与边总数匹配的合成标签
-                    total_edges = sum([graph.number_of_edges(etype) for etype in graph.etypes])
-                    # 根据边类型生成不同的默认标签
-                    edge_labels_list = []
-                    for etype in graph.etypes:
-                        num_edges = graph.number_of_edges(etype)
-                        if etype == 'triggers':
-                            # 触发关系更可能是攻击
-                            default_label = 1
-                        else:
-                            # 其他关系多为正常
-                            default_label = 0
+                    # 🔧 权威边标签生成逻辑 - 基于Risk-PPR确保长度匹配
+                    num_edges = graph.number_of_edges()
+                    if num_edges > 0:
+                        # 🛡️ 严格确保边标签长度=实际边数
+                        all_src_nodes = []
+                        all_dst_nodes = []
+                        
+                        if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
+                            # 异质图：遍历所有边类型
+                            for etype in graph.etypes:
+                                try:
+                                    src, dst = graph.edges(etype=etype)
+                                    all_src_nodes.append(src)
+                                    all_dst_nodes.append(dst)
+                                except Exception as e:
+                                    print(f"⚠️ 处理边类型 {etype} 时出错: {e}")
+                                    continue
                             
-                        edge_labels_list.append(torch.full((num_edges,), default_label, dtype=torch.long))
-                    
-                    if edge_labels_list:
-                        edge_labels = torch.cat(edge_labels_list, dim=0)
+                            if all_src_nodes and all_dst_nodes:
+                                src_nodes = torch.cat(all_src_nodes)
+                                dst_nodes = torch.cat(all_dst_nodes)
+                            else:
+                                # 空图：创建长度为0的边标签
+                                edge_labels = torch.empty(0, dtype=torch.float32)
+                                src_nodes = None
+                                dst_nodes = None
+                        else:
+                            # 同质图：直接获取边
+                            try:
+                                src_nodes, dst_nodes = graph.edges()
+                            except Exception as e:
+                                print(f"⚠️ 同质图边获取失败: {e}")
+                                edge_labels = torch.empty(0, dtype=torch.float32)
+                                src_nodes = None
+                                dst_nodes = None
+                        
+                        # 基于Risk-PPR生成权威边标签
+                        if src_nodes is not None and dst_nodes is not None and len(risk_scores) > max(src_nodes.max(), dst_nodes.max()):
+                            print(f"🔍 权威边标签生成: 文件={graph_file}, 边数={len(src_nodes)}, 风险分数数={len(risk_scores)}")
+                            
+                            src_risks = risk_scores[src_nodes]
+                            dst_risks = risk_scores[dst_nodes]
+                            edge_risk_scores = (src_risks + dst_risks) / 2.0
+                            
+                            # 基于文件名判断攻击场景
+                            filename = str(graph_file).lower()
+                            is_attack_scenario = any(attack in filename for attack in [
+                                'flood', 'scan', 'dos', 'ddos', 'syn', 'udp', 'icmp', 'http', 'tcp'
+                            ])
+                            
+                            # 生成权威边标签 - 确保长度=边数
+                            if is_attack_scenario:
+                                # 攻击场景：基于风险分数阈值
+                                high_risk_threshold = torch.quantile(edge_risk_scores, 0.7)
+                                edge_labels = (edge_risk_scores > high_risk_threshold).float()
+                                # 确保至少30%正样本
+                                num_positive = int(len(edge_labels) * 0.3)
+                                if edge_labels.sum() < num_positive:
+                                    top_indices = torch.topk(edge_risk_scores, num_positive).indices
+                                    edge_labels[top_indices] = 1.0
+                            else:
+                                # 正常场景：大部分负样本
+                                edge_labels = torch.zeros_like(edge_risk_scores)
+                                ultra_high_threshold = torch.quantile(edge_risk_scores, 0.95)
+                                edge_labels[edge_risk_scores > ultra_high_threshold] = 1.0
+                                
+                            # 🛡️ 严格验证：确保标签长度=边数
+                            assert len(edge_labels) == num_edges, f"❌ 边标签长度{len(edge_labels)}不等于边数{num_edges}"
+                            print(f"✅ 权威边标签生成完成: 攻击场景={is_attack_scenario}, 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)}")
+                        else:
+                            # 🛡️ 移除占位符：必须生成与边数匹配的标签
+                            if src_nodes is None or dst_nodes is None:
+                                print(f"⚠️ 无法获取边信息，生成空边标签: 文件={graph_file}")
+                                edge_labels = torch.empty(0, dtype=torch.float32)
+                            else:
+                                print(f"⚠️ 风险分数不匹配，生成默认边标签: 风险分数数={len(risk_scores)}, 最大节点索引={max(src_nodes.max(), dst_nodes.max())}")
+                                # 生成默认平衡标签，确保长度=边数
+                                edge_labels = torch.zeros(num_edges, dtype=torch.float32)
+                                # 20%作为正样本
+                                num_positive = max(1, num_edges // 5)
+                                positive_indices = torch.randperm(num_edges)[:num_positive]
+                                edge_labels[positive_indices] = 1.0
+                                
+                            # 🛡️ 最终验证
+                            assert len(edge_labels) == num_edges, f"❌ 默认边标签长度{len(edge_labels)}不等于边数{num_edges}"
                     else:
-                        edge_labels = torch.tensor([0])  # 最小兜底
-                
+                        # 空图的情况 - 长度为0的边标签
+                        edge_labels = torch.empty(0, dtype=torch.float32)
+            
+            # 🛡️ 强制edge_labels类型检查和修复
+            if not torch.is_tensor(edge_labels):
+                print(f"⚠️ edge_labels类型错误: {type(edge_labels)}, 转换为tensor")
+                if isinstance(edge_labels, dict):
+                    # 如果是字典，必须生成与边数匹配的边标签
+                    num_edges = graph.number_of_edges()
+                    edge_labels = torch.zeros(num_edges, dtype=torch.float32)
+                    # 20%作为正样本
+                    if num_edges > 0:
+                        num_pos = max(1, num_edges // 5)
+                        pos_indices = torch.randperm(num_edges)[:num_pos]
+                        edge_labels[pos_indices] = 1.0
+                elif hasattr(edge_labels, '__len__'):
+                    edge_labels = torch.tensor(edge_labels, dtype=torch.float32)
+                else:
+                    # 🚨 移除占位符：如果无法处理，生成空标签并报错
+                    raise ValueError(f"❌ 无法处理的edge_labels类型: {type(edge_labels)}")
+                print(f"✅ edge_labels已修复为tensor: {edge_labels.shape}")
+            
+            # 🛡️ 最终权威验证：确保边标签长度与边数完全匹配
+            num_edges = graph.number_of_edges()
+            if len(edge_labels) != num_edges:
+                raise ValueError(f"❌ 致命错误：边标签长度{len(edge_labels)}与图边数{num_edges}不匹配")
+            
+            # Generate negative samples (传递文件路径用于攻击类型判断)
+            positive_edges, negative_edges = self._generate_positive_negative_edges(graph, edge_labels, risk_scores, graph_file)
+            
+            # 验证正负样本平衡 - 修复后的调试信息
+            num_positive = len(positive_edges) if len(positive_edges.shape) > 1 else 0
+            num_negative = len(negative_edges) if len(negative_edges.shape) > 1 else 0
+            
+            # 每隔50个样本打印一次验证信息（减少日志输出）
+            if idx % 50 == 0:
+                print(f"Sample {idx}: 修复后采样 - 正边:{num_positive}, 负边:{num_negative} | "
+                      f"平衡度:{min(num_positive, num_negative)/max(num_positive, num_negative) if num_positive > 0 and num_negative > 0 else 0.0:.3f}")
+            
+            # 🛡️ 最终检查：确保所有返回的数据都是正确的类型
+            assert torch.is_tensor(edge_labels), f"edge_labels必须是tensor，但得到: {type(edge_labels)}"
+            assert torch.is_tensor(risk_scores), f"risk_scores必须是tensor，但得到: {type(risk_scores)}"
+            
             # Prepare output dict
             sample = {
                 'graph': graph,
                 'risk_scores': risk_scores,
                 'edge_labels': edge_labels,
+                'positive_edges': positive_edges,
+                'negative_edges': negative_edges,
                 'scale_type': file_info['scale_type'],
                 'file_name': file_info['file_name'],
-                'idx': idx
+                'idx': idx,
+                # 添加统计信息
+                'num_positive_edges': num_positive,
+                'num_negative_edges': num_negative
             }
             
             return sample
             
         except Exception as e:
-            # Fallback to placeholder data if loading fails
-            print(f"Warning: Failed to load {graph_file}: {e}. Using placeholder data.")
-            
-            # 创建最小的placeholder图
-            placeholder_graph = dgl.graph(([], []), num_nodes=10)
-            
-            return {
-                'graph': placeholder_graph,
-                'risk_scores': torch.full((10,), 0.1, dtype=torch.float32),  # 10个节点的默认风险
-                'edge_labels': torch.tensor([0]),  # 单个默认标签
-                'scale_type': file_info['scale_type'],
-                'file_name': file_info['file_name'],
-                'idx': idx
-            }
+            # 不使用占位符数据，而是直接抛出错误以便调试
+            print(f"❌ Failed to load {graph_file}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise e
 
 
 class GraphDataLoader:

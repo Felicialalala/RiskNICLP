@@ -1,5 +1,6 @@
 # RiskNICLP-5G Baseline Configuration
 # This configuration implements the "能跑、能评、能扩展" baseline model
+# Phase 2: Enhanced with Risk-Bias attention, negative sampling, and temporal prediction
 
 # Model Architecture
 model:
@@ -21,8 +22,96 @@ model:
   temperature: 0.1             # Attention temperature
   gravity_epsilon: 1e-3        # RiskGravity decoder epsilon
 
+# Phase 2 Configuration
+phase2:
+  # Risk-Bias Attention
+  risk_bias_attention:
+    enabled: true              # Enable risk-bias attention
+    method: 'simplified'       # 'simplified' | 'full'
+    beta_1: 0.5                # Source node risk weight
+    beta_2: 0.5                # Destination node risk weight
+    temperature: 0.1           # Risk bias temperature
+    
+  # Negative Sampling
+  negative_sampling:
+    enabled: true              # Enable negative sampling
+    type: 'risk_aware'         # 'baseline' | 'risk_aware'
+    strategy: 'semantic'       # 'uniform' | 'stratified' | 'hard' | 'semantic'
+    neg_ratio: 3               # Negative to positive sample ratio
+    risk_thresholds: [0.8, 0.5, 0.2]  # Risk stratification thresholds
+    hard_ratio: 0.3            # Hard negative sample ratio
+    seed: 42                   # Random seed for sampling
+    
+    # Attack semantic mapping for risk-aware sampling
+    attack_type_mapping:
+      'Benign': 0.0
+      'ICMPFlood': 0.3
+      'UDPFlood': 0.4
+      'SYNFlood': 0.6
+      'HTTPFlood': 0.7
+      'SlowrateDoS': 0.8
+      'TCPConnectScan': 0.7
+      'SYNScan': 0.6
+      'UDPScan': 0.5
+      
+    # Sampling quality control
+    max_attempts_multiplier: 10  # Maximum attempts multiplier
+    quality_threshold: 0.9       # Sampling quality threshold
+    
+    # Cross-type sampling ratios for semantic strategy
+    semantic_ratios:
+      ue_flow_ratio: 0.4         # UE->Flow false initiation ratio
+      flow_alert_ratio: 0.3      # Flow->Alert false trigger ratio
+      high_risk_ratio: 0.3       # High-risk internal connections ratio
+    
+  # Temporal Prediction - 优化架构策略
+  temporal_prediction:
+    enabled: true              # Enable temporal prediction
+    method: 'hetero_lstm'      # 'hetero_lstm' (P0推荐) | 'tgat_risk' (P1目标) | 'graph_rnn' (P2对比) | 'lstm_baseline'
+    window_size: 5             # Historical window size
+    stride: 1                  # Sliding window stride
+    future_steps: 3            # Number of future steps to predict
+    lead_time_targets: [5, 10, 15]  # Target lead-time thresholds (seconds)
+    
+    # P0 HeteroLSTM配置 - 快速实施版本
+    hetero_lstm:
+      spatial_encoder_reuse: true      # 复用SharedEncoder进行空间编码
+      graph_aggregation: 'mean_pool'   # 'mean_pool' | 'max_pool' | 'attention'
+      lstm_layers: 1                   # LSTM层数 (保持简单)
+      bidirectional: false             # 单向LSTM (减少复杂度)
+      
+    # P1 TGAT+Risk配置 - 性能目标版本  
+    tgat_risk:
+      edge_level_modeling: true        # 边级事件流建模
+      risk_bias_temperature: 0.1       # 风险偏置温度参数
+      num_heads: 4                     # 注意力头数
+      time_encoding_dim: 16            # 时间编码维度
+      
+    # P2 Graph-RNN配置 - 消融实验版本
+    graph_rnn:
+      node_level_generation: true      # 节点级生成模式
+      rnn_type: 'GRU'                  # 'GRU' | 'LSTM'
+      message_passing_steps: 3         # 消息传递步数
+    
+  # Cross-Scale Context
+  cross_scale_context:
+    enabled: true              # Enable cross-scale context
+    fusion_method: 'gate'      # 'gate' | 'attention'
+    
+  # Training Enhancements
+  training_enhancements:
+    progressive: true          # Enable progressive training
+    base_epochs: 20            # Base training epochs
+    risk_epochs: 30            # Risk-aware training epochs
+    scheduler: 'cosine'        # 'cosine' | 'step' | 'reduce_on_plateau'
+    early_stopping:
+      enabled: true            # Enable early stopping
+      patience: 10             # Early stopping patience
+      min_delta: 0.001         # Minimum improvement threshold
+
 # Training Configuration
 training:
+  mode: 'standard'             # Training mode: 'standard' | 'temporal'
   batch_size: 2                # CPU-friendly batch size
   accumulate_steps: 2          # Gradient accumulation for effective batch=4
   max_epochs: 20               # Maximum training epochs

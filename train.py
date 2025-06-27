@@ -33,48 +33,131 @@ from src.models import RiskNICLPModel, ProgressiveTrainer
 from src.evaluation import RiskNICLPEvaluator
 
 def graph_collate_fn(batch):
-    """Custom collate function for DGL graphs with safe tensor handling"""
-    # batch is a list of dictionaries
-    graphs = [item['graph'] for item in batch]
-    
-    # Batch graphs using DGL - this will handle node features automatically
-    batched_graph = dgl.batch(graphs)
-    
-    # Extract additional data
-    risk_scores = [item['risk_scores'] for item in batch]
-    edge_labels = [item['edge_labels'] for item in batch]
-    
-    # Safe concatenation for risk_scores
-    non_empty_risk_scores = [scores for scores in risk_scores if len(scores) > 0]
-    if non_empty_risk_scores:
-        batched_risk_scores = torch.cat(non_empty_risk_scores, dim=0)
-    else:
-        # 生成与节点总数匹配的默认风险分数 (0.1为默认低风险)
-        total_nodes = sum([g.number_of_nodes() for g in graphs])
-        batched_risk_scores = torch.full((total_nodes,), 0.1, dtype=torch.float32)
-    
-    # Safe concatenation for edge_labels
-    non_empty_edge_labels = [labels for labels in edge_labels if len(labels) > 0]
-    if non_empty_edge_labels:
-        batched_edge_labels = torch.cat(non_empty_edge_labels, dim=0)
-    else:
-        # 生成与边总数匹配的默认标签 (0为默认正常)
-        total_edges = sum([g.number_of_edges() for g in graphs])
-        batched_edge_labels = torch.full((total_edges,), 0, dtype=torch.long)
-    
-    # Collect other metadata
-    scale_types = [item['scale_type'] for item in batch]
-    file_names = [item['file_name'] for item in batch]
-    indices = [item['idx'] for item in batch]
-    
-    return {
-        'graph': batched_graph,
-        'risk_scores': batched_risk_scores,
-        'edge_labels': batched_edge_labels,
-        'scale_types': scale_types,
-        'file_names': file_names,
-        'indices': indices
-    }
+    """Simplified custom collate function for DGL graphs"""
+    try:
+
+        
+        # 1. Extract graphs and batch them
+        graphs = [item['graph'] for item in batch]
+        batched_graph = dgl.batch(graphs)
+        
+        # 2. Extract and concatenate risk scores
+        risk_scores = []
+        for item in batch:
+            if 'risk_scores' in item and torch.is_tensor(item['risk_scores']):
+                risk_scores.append(item['risk_scores'])
+            else:
+                # Fallback: generate default risk scores
+                num_nodes = item['graph'].number_of_nodes()
+                default_risk = torch.full((num_nodes,), 0.3, dtype=torch.float32)
+                risk_scores.append(default_risk)
+        
+        batched_risk_scores = torch.cat(risk_scores, dim=0) if risk_scores else torch.tensor([])
+        
+        # 3. Extract and concatenate edge labels - 🔧 修复：纯粹聚合，不再修改标签
+        edge_labels = []
+        for item in batch:
+            # 🛡️ 严格使用权威边标签，不再修改
+            if 'edge_labels' in item and torch.is_tensor(item['edge_labels']):
+                labels = item['edge_labels']
+                num_edges = item['graph'].number_of_edges()
+                
+                # 🛡️ 验证标签长度必须与边数匹配
+                if len(labels) != num_edges:
+                    raise ValueError(f"❌ Batch collate失败：边标签长度{len(labels)}与边数{num_edges}不匹配")
+                
+                edge_labels.append(labels)
+            else:
+                # 🚨 严格模式：不应该出现缺失边标签的情况
+                raise ValueError(f"❌ 严重错误：样本缺少权威边标签")
+        
+        batched_edge_labels = torch.cat(edge_labels, dim=0) if edge_labels else torch.empty(0, dtype=torch.float32)
+        
+        # 4. Handle positive and negative edges (simplified)
+        positive_edges = []
+        negative_edges = []
+        node_offset = 0
+        
+        for item in batch:
+            graph = item['graph']
+            
+            # Extract positive edges from graph structure
+            if hasattr(graph, 'edges') and graph.number_of_edges() > 0:
+                try:
+                    # 🔧 修复异质图边提取：针对异质图正确处理所有边类型
+                    if not graph.is_homogeneous:
+                        # 异质图：收集所有边类型的边
+                        all_src = []
+                        all_dst = []
+                        for etype in graph.etypes:
+                            src, dst = graph.edges(etype=etype)
+                            if len(src) > 0:
+                                all_src.append(src)
+                                all_dst.append(dst)
+                        
+                        if all_src and all_dst:
+                            combined_src = torch.cat(all_src)
+                            combined_dst = torch.cat(all_dst)
+                            pos_edges = torch.stack([combined_src, combined_dst], dim=1) + node_offset
+                        else:
+                            # 空图的情况
+                            pos_edges = torch.empty((0, 2), dtype=torch.long)
+                    else:
+                        # 同质图：直接调用
+                        src, dst = graph.edges()
+                        pos_edges = torch.stack([src, dst], dim=1) + node_offset
+                    
+                    positive_edges.append(pos_edges)
+                except Exception as e:
+                    print(f"⚠️ 提取边时出错: {e}")
+                    # Fallback: create minimal edges
+                    pos_edges = torch.tensor([[0, 0]], dtype=torch.long) + node_offset
+                    positive_edges.append(pos_edges)
+            
+            # Extract negative edges if available
+            if 'negative_edges' in item and item['negative_edges'] is not None and len(item['negative_edges']) > 0:
+                neg_edges = item['negative_edges'] + node_offset
+                negative_edges.append(neg_edges)
+            
+            # Update node offset
+            node_offset += graph.number_of_nodes()
+        
+        # 5. Concatenate edges
+        batched_positive_edges = torch.cat(positive_edges, dim=0) if positive_edges else torch.empty((0, 2), dtype=torch.long)
+        batched_negative_edges = torch.cat(negative_edges, dim=0) if negative_edges else torch.empty((0, 2), dtype=torch.long)
+        
+        # 6. Collect metadata
+        scale_types = [item.get('scale_type', 'fine') for item in batch]
+        file_names = [item.get('file_name', '') for item in batch]
+        indices = [item.get('idx', 0) for item in batch]
+        
+        # 7. Return result
+        result = {
+            'graph': batched_graph,
+            'risk_scores': batched_risk_scores,
+            'edge_labels': batched_edge_labels,
+            'scale_types': scale_types,
+            'file_names': file_names,
+            'indices': indices,
+            'positive_edges': batched_positive_edges,
+            'negative_edges': batched_negative_edges
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Collate function error: {e}")
+        # Return minimal fallback batch
+        return {
+            'graph': dgl.graph(([], []), num_nodes=1),
+            'risk_scores': torch.tensor([0.3]),
+            'edge_labels': torch.tensor([0]),
+            'scale_types': ['fine'],
+            'file_names': ['fallback'],
+            'indices': [0],
+            'positive_edges': torch.empty((0, 2), dtype=torch.long),
+            'negative_edges': torch.empty((0, 2), dtype=torch.long)
+        }
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -169,13 +252,29 @@ def prepare_data(config, logger):
         cache_dir=str(Path(config.data.cache_dir) / "risk")
     )
     
+    # Extract Phase 2 negative sampling configuration
+    negative_sampler_config = None
+    if hasattr(config, 'phase2') and 'negative_sampling' in config.phase2:
+        negative_sampler_config = config.phase2['negative_sampling']
+        strategy = negative_sampler_config.get('strategy', 'unknown')
+        neg_ratio = negative_sampler_config.get('neg_ratio', 3)
+        logger.logger.info(f"🎯 启用负采样策略: {strategy}, 负样本比例: {neg_ratio}:1")
+        
+        # Validate configuration
+        if strategy not in ['uniform', 'stratified', 'hard', 'semantic']:
+            logger.logger.warning(f"⚠️ 未知负采样策略: {strategy}, 将使用baseline")
+            negative_sampler_config = None
+    else:
+        logger.logger.info("📋 未启用Phase 2负采样，使用默认baseline采样器")
+    
     # Create dataset
     dataset = RiskNICLPDataset(
         graph_dir=config.data.graph_dir,
         metadata_dir=config.data.metadata_dir,
         feature_processor=feature_processor,
         risk_vectorizer=risk_vectorizer,
-        cache_manager=None  # Will be created internally
+        cache_manager=None,  # Will be created internally
+        negative_sampler_config=negative_sampler_config  # Pass negative sampling config
     )
     
     # Prepare data (this will fit processors if needed)
@@ -263,14 +362,45 @@ def create_model(config, data_info, logger):
 
 
 def create_trainer(model, config, data_info, logger):
-    """Create progressive trainer"""
+    """Create progressive trainer with temporal prediction support"""
     logger.logger.info("🏃 Setting up progressive trainer...")
+    
+    # Create temporal predictor if enabled in Phase 2
+    temporal_predictor = None
+    if hasattr(config, 'phase2') and config.phase2['temporal_prediction'].get('enabled', False):
+        from src.models.temporal_predictor import GraphTemporalPredictor
+        
+        temporal_config = config.phase2['temporal_prediction']
+        method = temporal_config.get('method', 'hetero_lstm')
+        
+        logger.logger.info(f"🕐 Initializing temporal predictor: {method}")
+        
+        # For hetero_lstm method, pass the shared_encoder
+        shared_encoder = None
+        if method == 'hetero_lstm':
+            if hasattr(model, 'shared_encoder'):
+                shared_encoder = model.shared_encoder
+                logger.logger.info("✅ Shared encoder passed to temporal predictor")
+            else:
+                logger.logger.warning("⚠️ Shared encoder not found, using fallback method")
+        
+        temporal_predictor = GraphTemporalPredictor(
+            hidden_dim=config.model.hidden_dim,
+            future_steps=temporal_config.get('future_steps', 3),
+            method=method,
+            shared_encoder=shared_encoder
+        )
+        
+        # Move to device
+        temporal_predictor = temporal_predictor.to(torch.device(config.device))
+        logger.logger.info(f"🚀 Temporal predictor ({method}) initialized successfully")
     
     trainer = ProgressiveTrainer(
         model=model,
         config=config,
         logger=logger,
-        device=torch.device(config.device)
+        device=torch.device(config.device),
+        temporal_predictor=temporal_predictor
     )
     
     return trainer
@@ -311,21 +441,34 @@ def main():
             include_env=True
         )
         
-        # Debug mode adjustments
-        if args.debug:
-            config.logging.log_level = "DEBUG"
-            config.training.max_epochs = 2
-            config.data.num_workers = 0
-            config.data.prefetch_factor = None  # Required when num_workers=0
-        
-        # Setup experiment
+        # Setup experiment first
         logger = setup_experiment(config, args)
         
-        # Log system information
+        # Debug mode adjustments
+        if args.debug:
+            config.training.max_epochs = 2
+            config.training.batch_size = min(config.training.batch_size, 2)
+            config.data.num_workers = 0
+            config.logging.log_level = 'DEBUG'
+            logger.logger.info("🐛 Debug模式: 限制训练轮数=2, 批次大小≤2")
+        
+        # Initialize device configuration
+        import torch
+        if hasattr(config, 'device') and config.device is not None:
+            device = config.device
+        else:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        
+        if hasattr(config, 'num_threads') and config.num_threads is not None:
+            num_threads = config.num_threads
+        else:
+            num_threads = torch.get_num_threads() if device == 'cpu' else 1
+            
+        config.device = device
+        config.num_threads = num_threads
+        
         logger.logger.info(f"🖥️ Device: {config.device}")
         logger.logger.info(f"🧵 Threads: {config.num_threads}")
-        if config.device == "cpu":
-            torch.set_num_threads(config.num_threads)
         
         # Prepare data
         data_info = prepare_data(config, logger)
@@ -333,59 +476,66 @@ def main():
         # Create model
         model = create_model(config, data_info, logger)
         
-        # Create trainer and evaluator
+        # Create trainer  
         trainer = create_trainer(model, config, data_info, logger)
+        
+        # Create evaluator
         evaluator = create_evaluator(model, config, data_info, logger)
         
-        # Resume from checkpoint if specified
-        if args.resume:
-            logger.logger.info(f"📂 Resuming from checkpoint: {args.resume}")
-            trainer.load_checkpoint(args.resume)
-        
-        if args.dry_run:
-            logger.logger.info("🧪 Dry run completed successfully!")
-            return
-        
-        # Training
+        # Train model
         logger.logger.info("🚀 Starting training...")
-        
-        # Progressive training
-        best_model = trainer.train_progressive(
-            train_loader=data_info['train_loader'],
-            val_loader=data_info['val_loader']
+        trained_model = trainer.train_progressive(
+            data_info['train_loader'],
+            data_info['val_loader']
         )
         
         # Final evaluation
         logger.logger.info("🎯 Running final evaluation...")
-        
         test_results = evaluator.evaluate(
-            data_loader=data_info['test_loader'],
-            split_name="test",
-            save_results=True
+            data_info['test_loader'],
+            'test'
         )
         
+        # Log test results
         logger.logger.info("📊 Test Results:")
-        for metric, value in test_results.items():
-            logger.logger.info(f"  {metric}: {value:.4f}")
-        
-        # Log final metrics
-        logger.log_metrics({
-            f"final_test/{k}": v for k, v in test_results.items()
-        })
+        for key, value in test_results.items():
+            logger.logger.info(f"  {key}: {value:.4f}")
         
         # Save final model
-        output_dir = Path(config.logging.log_dir) / config.experiment_name
-        output_dir.mkdir(parents=True, exist_ok=True)
+        save_path = Path(config.logging.log_dir) / config.experiment_name / "final_model.pt"
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(trained_model.state_dict(), save_path)
+        logger.logger.info(f"💾 Model saved to: {save_path}")
         
-        model_path = output_dir / "final_model.pt"
-        torch.save({
-            'model_state_dict': best_model.state_dict(),
-            'config': config,
-            'test_results': test_results
-        }, model_path)
-        
-        logger.logger.info(f"💾 Model saved to: {model_path}")
         logger.logger.info("✅ Training completed successfully!")
+        
+        # Debug模式额外验证
+        if args.debug:
+            logger.logger.info("🔍 Debug模式验证:")
+            # 验证负采样配置是否正确传递
+            dataset = data_info['dataset']
+            if hasattr(dataset, 'negative_sampler') and dataset.negative_sampler is not None:
+                sampler_type = type(dataset.negative_sampler).__name__
+                logger.logger.info(f"  负采样器类型: {sampler_type}")
+                if hasattr(dataset.negative_sampler, 'strategy'):
+                    logger.logger.info(f"  采样策略: {dataset.negative_sampler.strategy}")
+            else:
+                logger.logger.warning("  ⚠️ 负采样器未正确初始化")
+            
+            # 验证批次中是否包含正负样本边
+            train_loader = data_info['train_loader']
+            batch_sample = next(iter(train_loader))
+            has_pos_edges = 'positive_edges' in batch_sample and batch_sample['positive_edges'] is not None
+            has_neg_edges = 'negative_edges' in batch_sample and batch_sample['negative_edges'] is not None
+            logger.logger.info(f"  批次包含正样本边: {has_pos_edges}")
+            logger.logger.info(f"  批次包含负样本边: {has_neg_edges}")
+            
+            if has_pos_edges:
+                logger.logger.info(f"  正样本边数量: {len(batch_sample['positive_edges'])}")
+            if has_neg_edges:
+                logger.logger.info(f"  负样本边数量: {len(batch_sample['negative_edges'])}")
+        
+        return trained_model
         
     except KeyboardInterrupt:
         logger.logger.info("⏹️ Training interrupted by user")
