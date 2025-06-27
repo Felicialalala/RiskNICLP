@@ -161,6 +161,9 @@ class RiskAwareNegativeSampler:
         else:
             self.attack_type_mapping = attack_type_mapping
         
+        # 🔧 动态阈值：初始化为None，在采样时基于实际数据计算
+        self._dynamic_risk_thresholds = None
+        
         # 设置随机种子
         random.seed(seed)
         np.random.seed(seed)
@@ -178,6 +181,29 @@ class RiskAwareNegativeSampler:
             'semantic': self._semantic_aware_sampling
         }
         
+    def _calculate_adaptive_neg_ratio(self, positive_edges: torch.Tensor, graph: dgl.DGLGraph) -> int:
+        """🔧 自适应负采样比例计算，基于正样本数量和图规模"""
+        num_pos_edges = positive_edges.shape[0]
+        num_nodes = graph.number_of_nodes()
+        
+        if num_pos_edges == 0:
+            return min(self.neg_ratio, 1)  # 无正样本时使用最小比例
+        
+        # 动态调整策略：正样本少时增加负样本，正样本多时减少负样本
+        if num_pos_edges < 50:
+            # 正样本极少：增加负样本比例，但限制总数
+            adaptive_ratio = min(self.neg_ratio + 2, 5)
+            max_neg_samples = min(adaptive_ratio * num_pos_edges, 3000)
+            final_ratio = max_neg_samples // num_pos_edges if num_pos_edges > 0 else 3
+        elif num_pos_edges < 200:
+            # 正样本较少：标准比例
+            final_ratio = self.neg_ratio
+        else:
+            # 正样本充足：可以减少负样本比例
+            final_ratio = max(self.neg_ratio - 1, 2)
+        
+        return final_ratio
+    
     def sample_negatives(
         self, 
         graph: dgl.DGLGraph, 
@@ -212,12 +238,42 @@ class RiskAwareNegativeSampler:
         if len(risk_scores) == 0:
             raise ValueError("risk_scores cannot be empty")
         
+        # 🔧 动态阈值计算：基于实际风险分布
+        self._update_dynamic_thresholds(risk_scores)
+        
+        # 🔧 自适应负采样比例
+        original_neg_ratio = self.neg_ratio
+        self.neg_ratio = self._calculate_adaptive_neg_ratio(positive_edges, graph)
+        
         # 4. 策略存在性检查
         if self.strategy not in self._sampling_strategies:
             raise ValueError(f"未知的采样策略: {self.strategy}")
             
-        sampling_func = self._sampling_strategies[self.strategy]
-        return sampling_func(graph, positive_edges, risk_scores)
+        try:
+            sampling_func = self._sampling_strategies[self.strategy]
+            result = sampling_func(graph, positive_edges, risk_scores)
+        finally:
+            # 恢复原始neg_ratio
+            self.neg_ratio = original_neg_ratio
+        
+        return result
+    
+    def _update_dynamic_thresholds(self, risk_scores: torch.Tensor):
+        """🔧 动态更新风险阈值，基于实际数据分布"""
+        if len(risk_scores) > 0:
+            # 基于分位数动态计算阈值
+            q90 = torch.quantile(risk_scores, 0.9).item()
+            q60 = torch.quantile(risk_scores, 0.6).item()
+            q30 = torch.quantile(risk_scores, 0.3).item()
+            
+            self._dynamic_risk_thresholds = [q90, q60, q30]
+            
+            # 如果所有节点风险相同，使用微小偏移
+            if q90 == q30:
+                max_risk = risk_scores.max().item()
+                self._dynamic_risk_thresholds = [max_risk * 0.9, max_risk * 0.6, max_risk * 0.3]
+        else:
+            self._dynamic_risk_thresholds = self.risk_thresholds
         
     def _uniform_sampling(
         self, 
@@ -240,10 +296,15 @@ class RiskAwareNegativeSampler:
         num_pos_edges = positive_edges.shape[0]
         num_neg_edges = num_pos_edges * self.neg_ratio
         
-        # 安全获取风险阈值，确保类型正确
+        # 🔧 使用动态阈值，确保基于实际数据分布
+        if self._dynamic_risk_thresholds is not None:
+            thresholds = self._dynamic_risk_thresholds
+        else:
+            thresholds = self.risk_thresholds
+        
         try:
-            high_threshold = float(self.risk_thresholds[0])
-            low_threshold = float(self.risk_thresholds[2])
+            high_threshold = float(thresholds[0])
+            low_threshold = float(thresholds[2])
         except (TypeError, ValueError, IndexError) as e:
             # 使用默认阈值
             high_threshold = 0.8
@@ -264,6 +325,11 @@ class RiskAwareNegativeSampler:
                 (risk_scores <= high_threshold)
             )[0]
             low_risk_nodes = torch.where(risk_scores <= low_threshold)[0]
+            
+            # 🔧 调试信息：显示动态阈值效果
+            if hasattr(self, 'logger') and len(high_risk_nodes) > 0:
+                self.logger.debug(f"动态阈值: [高:{high_threshold:.3f}, 低:{low_threshold:.3f}] -> 高风险节点:{len(high_risk_nodes)}")
+                
         except Exception as e:
             # 如果风险分数类型错误，使用随机节点分组
             if hasattr(self, 'logger'):
@@ -572,10 +638,32 @@ class RiskAwareNegativeSampler:
             high_risk_src_nodes = valid_src_nodes
             high_risk_dst_nodes = valid_dst_nodes
         
-        # 快速随机采样
+        # 🔧 改进多样性采样：温度控制的概率采样
+        temp = 0.7  # 温度参数
         while len(negative_edges) < num_samples and attempts < max_attempts:
-            src_node = random.choice(high_risk_src_nodes)
-            dst_node = random.choice(high_risk_dst_nodes)
+            try:
+                # 温度控制的概率选择，而非pure random
+                if len(high_risk_src_nodes) > 1:
+                    src_idx = int(torch.multinomial(
+                        torch.softmax(torch.randn(len(high_risk_src_nodes)) / temp, dim=0), 
+                        1
+                    ).item())
+                    src_node = high_risk_src_nodes[src_idx]
+                else:
+                    src_node = high_risk_src_nodes[0] if high_risk_src_nodes else valid_src_nodes[0]
+                
+                if len(high_risk_dst_nodes) > 1:
+                    dst_idx = int(torch.multinomial(
+                        torch.softmax(torch.randn(len(high_risk_dst_nodes)) / temp, dim=0), 
+                        1
+                    ).item())
+                    dst_node = high_risk_dst_nodes[dst_idx]
+                else:
+                    dst_node = high_risk_dst_nodes[0] if high_risk_dst_nodes else valid_dst_nodes[0]
+            except:
+                # 回退到随机采样
+                src_node = random.choice(high_risk_src_nodes) if high_risk_src_nodes else random.choice(valid_src_nodes)
+                dst_node = random.choice(high_risk_dst_nodes) if high_risk_dst_nodes else random.choice(valid_dst_nodes)
             
             if src_node != dst_node and (src_node, dst_node) not in positive_edge_set:
                 negative_edges.append([src_node, dst_node])

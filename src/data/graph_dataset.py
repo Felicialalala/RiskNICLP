@@ -376,31 +376,60 @@ class RiskNICLPDataset(Dataset):
                             dst_risks = risk_scores[dst_nodes]
                             edge_risk_scores = (src_risks + dst_risks) / 2.0
                             
-                            # 基于文件名判断攻击场景
-                            filename = str(graph_file).lower()
-                            is_attack_scenario = any(attack in filename for attack in [
-                                'flood', 'scan', 'dos', 'ddos', 'syn', 'udp', 'icmp', 'http', 'tcp'
-                            ])
-                            
-                            # 生成权威边标签 - 确保长度=边数
-                            if is_attack_scenario:
-                                # 攻击场景：基于风险分数阈值
-                                high_risk_threshold = torch.quantile(edge_risk_scores, 0.7)
-                                edge_labels = (edge_risk_scores > high_risk_threshold).float()
-                                # 确保至少30%正样本
-                                num_positive = int(len(edge_labels) * 0.3)
-                                if edge_labels.sum() < num_positive:
-                                    top_indices = torch.topk(edge_risk_scores, num_positive).indices
-                                    edge_labels[top_indices] = 1.0
+                            # 🔧 修复: 基于边类型的语义正样本定义，而非文件名
+                            # 异质图的语义正样本策略
+                            if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
+                                # 异质图：基于边类型语义定义正样本
+                                edge_labels = torch.zeros(num_edges, dtype=torch.float32)
+                                edge_offset = 0
+                                
+                                for etype in graph.etypes:
+                                    src, dst = graph.edges(etype=etype)
+                                    num_etype_edges = len(src)
+                                    
+                                    if num_etype_edges > 0:
+                                        # 基于边类型的正样本比例
+                                        if etype == 'triggers':
+                                            # Flow -> Alert: 高风险传播，80%正样本
+                                            pos_ratio = 0.8
+                                        elif etype == 'initiates':
+                                            # UE -> Flow: 中风险发起，40%正样本
+                                            pos_ratio = 0.4
+                                        elif etype == 'temporal_adj':
+                                            # Flow -> Flow: 时序关联，15%正样本
+                                            pos_ratio = 0.15
+                                        else:
+                                            # 其他边类型：10%正样本
+                                            pos_ratio = 0.1
+                                        
+                                        # 基于风险分数优选正样本
+                                        if len(src) > 0 and edge_offset + len(src) <= len(edge_risk_scores):
+                                            etype_edge_risks = edge_risk_scores[edge_offset:edge_offset + num_etype_edges]
+                                            num_positive = max(1, int(num_etype_edges * pos_ratio))
+                                            
+                                            # 选择风险最高的边作为正样本
+                                            top_indices = torch.topk(etype_edge_risks, min(num_positive, len(etype_edge_risks))).indices
+                                            edge_labels[edge_offset + top_indices] = 1.0
+                                        
+                                        edge_offset += num_etype_edges
+                                
+                                print(f"✅ 基于边类型语义定义: 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)} ({edge_labels.sum().item()/len(edge_labels)*100:.1f}%)")
                             else:
-                                # 正常场景：大部分负样本
-                                edge_labels = torch.zeros_like(edge_risk_scores)
-                                ultra_high_threshold = torch.quantile(edge_risk_scores, 0.95)
-                                edge_labels[edge_risk_scores > ultra_high_threshold] = 1.0
+                                # 同质图：基于风险分数分层
+                                risk_threshold = torch.quantile(edge_risk_scores, 0.7)  # 降低到70%分位数
+                                edge_labels = (edge_risk_scores > risk_threshold).float()
+                                
+                                # 确保至少20%正样本
+                                min_positive = max(1, int(len(edge_labels) * 0.2))
+                                if edge_labels.sum() < min_positive:
+                                    top_indices = torch.topk(edge_risk_scores, min_positive).indices
+                                    edge_labels[top_indices] = 1.0
+                                
+                                print(f"✅ 同质图风险分层: 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)} ({edge_labels.sum().item()/len(edge_labels)*100:.1f}%)")
                                 
                             # 🛡️ 严格验证：确保标签长度=边数
                             assert len(edge_labels) == num_edges, f"❌ 边标签长度{len(edge_labels)}不等于边数{num_edges}"
-                            print(f"✅ 权威边标签生成完成: 攻击场景={is_attack_scenario}, 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)}")
+                            print(f"✅ 权威边标签生成完成: 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)}")
                         else:
                             # 🛡️ 移除占位符：必须生成与边数匹配的标签
                             if src_nodes is None or dst_nodes is None:

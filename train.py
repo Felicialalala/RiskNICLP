@@ -14,6 +14,7 @@ import sys
 import time
 import argparse
 from pathlib import Path
+import random
 
 # Add src to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -131,7 +132,63 @@ def graph_collate_fn(batch):
         file_names = [item.get('file_name', '') for item in batch]
         indices = [item.get('idx', 0) for item in batch]
         
-        # 7. Return result
+        # 7. Return result with enhanced training metadata
+        # 🔧 正样本增强策略：解决正样本稀少问题
+        enhanced_positive_edges = []
+        enhanced_edge_labels = []
+        pos_weight_multiplier = 1.0
+        
+        # 计算每个图的节点偏移量
+        node_offset_list = [0]
+        for item in batch:
+            node_offset_list.append(node_offset_list[-1] + item['graph'].number_of_nodes())
+        
+        for i, item in enumerate(batch):
+            # 提取属于当前图的正样本边
+            if len(batched_positive_edges) > 0:
+                mask = (batched_positive_edges[:, 0] >= node_offset_list[i]) & (batched_positive_edges[:, 0] < node_offset_list[i+1])
+                original_pos_edges = batched_positive_edges[mask]
+            else:
+                original_pos_edges = torch.empty((0, 2), dtype=torch.long)
+            
+            num_original_pos = len(original_pos_edges)
+            
+            # 正样本过少时进行增强
+            if num_original_pos > 0 and num_original_pos < 64:
+                # 策略1: 时间抖动增强 (±1 node offset模拟)
+                jittered_edges = []
+                for edge in original_pos_edges:
+                    src, dst = edge[0].item(), edge[1].item()
+                    # 轻微抖动：±1范围内的节点
+                    for _ in range(2):  # 每个正边生成2个抖动版本
+                        jitter_src = max(node_offset_list[i], min(node_offset_list[i+1]-1, src + random.choice([-1, 0, 1])))
+                        jitter_dst = max(node_offset_list[i], min(node_offset_list[i+1]-1, dst + random.choice([-1, 0, 1])))
+                        if jitter_src != jitter_dst and [jitter_src, jitter_dst] not in original_pos_edges.tolist():
+                            jittered_edges.append([jitter_src, jitter_dst])
+                
+                # 策略2: 重复采样达到最小阈值
+                target_pos_count = min(64, num_original_pos * 3)
+                if len(jittered_edges) + num_original_pos < target_pos_count:
+                    repeat_count = (target_pos_count - len(jittered_edges)) // num_original_pos + 1
+                    repeated_edges = original_pos_edges.repeat(repeat_count, 1)[:target_pos_count - len(jittered_edges)]
+                    enhanced_positive_edges.extend(repeated_edges.tolist())
+                
+                enhanced_positive_edges.extend(jittered_edges)
+                
+                # 计算正样本权重倍数
+                pos_weight_multiplier = max(pos_weight_multiplier, target_pos_count / max(num_original_pos, 1))
+            
+        # 添加增强的正样本边
+        if enhanced_positive_edges:
+            enhanced_pos_tensor = torch.tensor(enhanced_positive_edges, dtype=torch.long)
+            batched_positive_edges = torch.cat([batched_positive_edges, enhanced_pos_tensor], dim=0)
+        
+        # 动态计算pos_weight用于BCE loss
+        total_pos = len(batched_positive_edges)
+        total_neg = len(batched_negative_edges)
+        pos_weight = max(1.0, total_neg / max(total_pos, 1)) * pos_weight_multiplier
+        
+        # 7. Return result with enhanced training metadata
         result = {
             'graph': batched_graph,
             'risk_scores': batched_risk_scores,
@@ -140,7 +197,12 @@ def graph_collate_fn(batch):
             'file_names': file_names,
             'indices': indices,
             'positive_edges': batched_positive_edges,
-            'negative_edges': batched_negative_edges
+            'negative_edges': batched_negative_edges,
+            # 🔧 新增：正样本增强元数据
+            'pos_weight': pos_weight,
+            'enhancement_applied': len(enhanced_positive_edges) > 0,
+            'original_pos_count': total_pos - len(enhanced_positive_edges) if enhanced_positive_edges else total_pos,
+            'enhanced_pos_count': len(enhanced_positive_edges)
         }
         
         return result

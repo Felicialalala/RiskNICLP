@@ -1,0 +1,233 @@
+2025-06-27 14:24:03,667 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
+2025-06-27 14:24:03,667 - RiskNICLP-5G - INFO - train.py:226 - 🚀 Starting experiment: riskniclp_baseline_20250627_142403
+2025-06-27 14:24:03,668 - RiskNICLP-5G - INFO - train.py:227 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 0.5, 'beta_2': 0.5, 'temperature': 0.1}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.3, 'UDPFlood': 0.4, 'SYNFlood': 0.6, 'HTTPFlood': 0.7, 'SlowrateDoS': 0.8, 'TCPConnectScan': 0.7, 'SYNScan': 0.6, 'UDPScan': 0.5}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250627_142403', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-06-27 14:24:03,668 - RiskNICLP-5G - INFO - train.py:470 - 🖥️ Device: cpu
+2025-06-27 14:24:03,668 - RiskNICLP-5G - INFO - train.py:471 - 🧵 Threads: 8
+2025-06-27 14:24:03,668 - RiskNICLP-5G - INFO - train.py:234 - 📊 Preparing data processing pipeline...
+2025-06-27 14:24:03,670 - RiskNICLP-5G - INFO - train.py:261 - 🎯 启用负采样策略: semantic, 负样本比例: 3:1
+2025-06-27 14:24:03,671 - RiskNICLP-5G - INFO - train.py:281 - 🔄 Fitting data processors...
+2025-06-27 14:24:03,673 - RiskNICLP-5G - INFO - train.py:292 - 📈 Data splits: Train=60, Val=7, Test=8
+2025-06-27 14:24:03,673 - RiskNICLP-5G - INFO - train.py:336 - 🏗️ Creating model architecture...
+2025-06-27 14:24:03,679 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 57710.0000, model/trainable_parameters: 57710.0000, model/non_trainable_parameters: 0.0000
+2025-06-27 14:24:03,679 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 57,710 total parameters, 57,710 trainable
+2025-06-27 14:24:03,679 - RiskNICLP-5G - INFO - train.py:366 - 🏃 Setting up progressive trainer...
+2025-06-27 14:24:03,679 - RiskNICLP-5G - INFO - train.py:376 - 🕐 Initializing temporal predictor: hetero_lstm
+2025-06-27 14:24:03,680 - RiskNICLP-5G - INFO - train.py:383 - ✅ Shared encoder passed to temporal predictor
+2025-06-27 14:24:03,681 - RiskNICLP-5G - INFO - train.py:396 - 🚀 Temporal predictor (hetero_lstm) initialized successfully
+2025-06-27 14:24:04,181 - RiskNICLP-5G - INFO - train.py:411 - 📊 Setting up evaluator...
+2025-06-27 14:24:04,181 - RiskNICLP-5G - INFO - train.py:486 - 🚀 Starting training...
+2025-06-27 14:24:04,181 - RiskNICLP-5G - INFO - training.py:123 - 🔒 Risk parameters frozen for basic phase
+2025-06-27 14:24:29,126 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 1/20 [BASIC]: Train Loss: 0.8928, Val AUC: 0.5975, Phase: Basic GNN feature learning
+2025-06-27 14:24:29,127 - RiskNICLP-5G - INFO - training.py:649 - Checkpoint saved: best_model.pt
+2025-06-27 14:24:29,127 - RiskNICLP-5G - INFO - training.py:200 - 💾 New best model saved (AUC: 0.5975)
+2025-06-27 14:24:53,838 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 2/20 [BASIC]: Train Loss: 0.8862, Val AUC: 0.5850, Phase: Basic GNN feature learning
+2025-06-27 14:25:17,825 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 3/20 [BASIC]: Train Loss: 0.8871, Val AUC: 0.5728, Phase: Basic GNN feature learning
+2025-06-27 14:25:40,800 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 4/20 [BASIC]: Train Loss: 0.8871, Val AUC: 0.5675, Phase: Basic GNN feature learning
+2025-06-27 14:26:06,511 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 5/20 [BASIC]: Train Loss: 0.8873, Val AUC: 0.5634, Phase: Basic GNN feature learning
+2025-06-27 14:26:07,321 - RiskNICLP-5G - INFO - training.py:153 - 🔄 Advancing from basic to risk_aware phase (reason: epoch limit reached)
+2025-06-27 14:26:07,321 - RiskNICLP-5G - INFO - training.py:167 - 🔓 Risk parameters unfrozen for risk-aware phase
+2025-06-27 14:26:29,440 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 6/20 [RISK_AWARE]: Train Loss: 0.8866, Val AUC: 0.5606, Phase: Risk-aware attention training
+2025-06-27 14:26:55,507 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 7/20 [RISK_AWARE]: Train Loss: 0.8864, Val AUC: 0.5581, Phase: Risk-aware attention training
+2025-06-27 14:27:18,737 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 8/20 [RISK_AWARE]: Train Loss: 0.8864, Val AUC: 0.5527, Phase: Risk-aware attention training
+2025-06-27 14:27:42,825 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 9/20 [RISK_AWARE]: Train Loss: 0.8864, Val AUC: 0.5512, Phase: Risk-aware attention training
+2025-06-27 14:28:07,035 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 10/20 [RISK_AWARE]: Train Loss: 0.8861, Val AUC: 0.5394, Phase: Risk-aware attention training
+2025-06-27 14:28:32,550 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 11/20 [RISK_AWARE]: Train Loss: 0.8869, Val AUC: 0.5505, Phase: Risk-aware attention training
+2025-06-27 14:28:58,444 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 12/20 [RISK_AWARE]: Train Loss: 0.8863, Val AUC: 0.5475, Phase: Risk-aware attention training
+2025-06-27 14:29:24,044 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 13/20 [RISK_AWARE]: Train Loss: 0.8864, Val AUC: 0.5427, Phase: Risk-aware attention training
+2025-06-27 14:29:48,057 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 14/20 [RISK_AWARE]: Train Loss: 0.8866, Val AUC: 0.5344, Phase: Risk-aware attention training
+2025-06-27 14:30:11,900 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 15/20 [RISK_AWARE]: Train Loss: 0.8867, Val AUC: 0.5317, Phase: Risk-aware attention training
+2025-06-27 14:30:12,385 - RiskNICLP-5G - INFO - training.py:153 - 🔄 Advancing from risk_aware to full_fusion phase (reason: epoch limit reached)
+2025-06-27 14:30:12,386 - RiskNICLP-5G - INFO - training.py:171 - 🚀 Full fusion phase activated
+2025-06-27 14:30:36,702 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 16/20 [FULL_FUSION]: Train Loss: 0.8863, Val AUC: 0.5338, Phase: Complete model optimization
+2025-06-27 14:30:59,893 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 17/20 [FULL_FUSION]: Train Loss: 0.8867, Val AUC: 0.5369, Phase: Complete model optimization
+2025-06-27 14:31:24,009 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 18/20 [FULL_FUSION]: Train Loss: 0.8874, Val AUC: 0.5406, Phase: Complete model optimization
+2025-06-27 14:31:50,682 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 19/20 [FULL_FUSION]: Train Loss: 0.8867, Val AUC: 0.5423, Phase: Complete model optimization
+2025-06-27 14:32:19,440 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 20/20 [FULL_FUSION]: Train Loss: 0.8866, Val AUC: 0.5436, Phase: Complete model optimization
+2025-06-27 14:32:19,441 - RiskNICLP-5G - INFO - training.py:203 - ✅ Progressive training completed. Best AUC: 0.5975
+2025-06-27 14:32:19,441 - RiskNICLP-5G - INFO - train.py:493 - 🎯 Running final evaluation...
+2025-06-27 14:32:19,441 - RiskNICLP-5G - INFO - evaluator.py:61 - 🎯 Starting evaluation on test set...
+2025-06-27 14:32:21,036 - RiskNICLP-5G - INFO - evaluator.py:243 - 🔄 负采样效果: 平衡度 0.004, 质量 0.500, 分离度 -0.000, 综合评分 0.151
+2025-06-27 14:32:21,037 - RiskNICLP-5G - INFO - evaluator.py:525 - 📊 Evaluation Results for test:
+2025-06-27 14:32:21,037 - RiskNICLP-5G - INFO - evaluator.py:530 - 🚨 P0 - Real-time Security:
+2025-06-27 14:32:21,037 - RiskNICLP-5G - INFO - evaluator.py:532 -   lead_time_mean: 1.3526
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:532 -   lead_time_std: 0.5405
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:532 -   mttd_30s: 30.0000
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:537 - 🎯 P1 - Detection Quality:
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:539 -   risk_weighted_precision: 0.0084
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:539 -   risk_weighted_recall: 1.0000
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:539 -   aupr: 0.0040
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:544 - 📍 P2 - Directional Accuracy:
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:546 -   directional_hit_100: 1.0000
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:546 -   direction_error_rate: 0.0000
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:551 - 📈 P3 - Traditional Metrics:
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:553 -   auc: 0.5199
+2025-06-27 14:32:21,038 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_10: 0.0000
+2025-06-27 14:32:21,039 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_50: 0.0000
+2025-06-27 14:32:21,039 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_100: 0.0000
+2025-06-27 14:32:21,040 - RiskNICLP-5G - INFO - evaluator.py:599 - 💾 Evaluation results saved to logs/evaluation_test.json
+2025-06-27 14:32:21,040 - RiskNICLP-5G - INFO - train.py:500 - 📊 Test Results:
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p0_lead_time_mean: 1.3526
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p0_lead_time_std: 0.5405
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p0_mttd_30s: 30.0000
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p1_risk_weighted_precision: 0.0084
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p1_risk_weighted_recall: 1.0000
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p1_aupr: 0.0040
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p2_directional_hit_100: 1.0000
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p2_direction_error_rate: 0.0000
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p3_auc: 0.5199
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p3_hit_10: 0.0000
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p3_hit_50: 0.0000
+2025-06-27 14:32:21,041 - RiskNICLP-5G - INFO - train.py:502 -   p3_hit_100: 0.0000
+2025-06-27 14:32:21,042 - RiskNICLP-5G - INFO - train.py:502 -   ns_sampling_balance_ratio: 0.0041
+2025-06-27 14:32:21,042 - RiskNICLP-5G - INFO - train.py:502 -   ns_negative_sample_quality: 0.5000
+2025-06-27 14:32:21,042 - RiskNICLP-5G - INFO - train.py:502 -   ns_positive_negative_separation: -0.0000
+2025-06-27 14:32:21,042 - RiskNICLP-5G - INFO - train.py:502 -   ns_sampling_diversity_score: 0.0000
+2025-06-27 14:32:21,042 - RiskNICLP-5G - INFO - train.py:502 -   ns_overall_negative_sampling_score: 0.1512
+2025-06-27 14:32:21,046 - RiskNICLP-5G - INFO - train.py:508 - 💾 Model saved to: logs/riskniclp_baseline_20250627_142403/final_model.pt
+2025-06-27 14:32:21,046 - RiskNICLP-5G - INFO - train.py:510 - ✅ Training completed successfully!
+2025-06-27 14:32:21,046 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
+2025-06-27 14:46:53,759 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
+2025-06-27 14:46:53,759 - RiskNICLP-5G - INFO - train.py:287 - 🚀 Starting experiment: riskniclp_baseline_20250627_144653
+2025-06-27 14:46:53,759 - RiskNICLP-5G - INFO - train.py:288 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 0.5, 'beta_2': 0.5, 'temperature': 0.1}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.3, 'UDPFlood': 0.4, 'SYNFlood': 0.6, 'HTTPFlood': 0.7, 'SlowrateDoS': 0.8, 'TCPConnectScan': 0.7, 'SYNScan': 0.6, 'UDPScan': 0.5}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250627_144653', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-06-27 14:46:53,759 - RiskNICLP-5G - INFO - train.py:531 - 🖥️ Device: cpu
+2025-06-27 14:46:53,760 - RiskNICLP-5G - INFO - train.py:532 - 🧵 Threads: 8
+2025-06-27 14:46:53,760 - RiskNICLP-5G - INFO - train.py:295 - 📊 Preparing data processing pipeline...
+2025-06-27 14:46:53,762 - RiskNICLP-5G - INFO - train.py:322 - 🎯 启用负采样策略: semantic, 负样本比例: 3:1
+2025-06-27 14:46:53,763 - RiskNICLP-5G - INFO - train.py:342 - 🔄 Fitting data processors...
+2025-06-27 14:46:53,765 - RiskNICLP-5G - INFO - train.py:353 - 📈 Data splits: Train=60, Val=7, Test=8
+2025-06-27 14:46:53,766 - RiskNICLP-5G - INFO - train.py:397 - 🏗️ Creating model architecture...
+2025-06-27 14:46:53,772 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 57710.0000, model/trainable_parameters: 57710.0000, model/non_trainable_parameters: 0.0000
+2025-06-27 14:46:53,772 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 57,710 total parameters, 57,710 trainable
+2025-06-27 14:46:53,772 - RiskNICLP-5G - INFO - train.py:427 - 🏃 Setting up progressive trainer...
+2025-06-27 14:46:53,772 - RiskNICLP-5G - INFO - train.py:437 - 🕐 Initializing temporal predictor: hetero_lstm
+2025-06-27 14:46:53,772 - RiskNICLP-5G - INFO - train.py:444 - ✅ Shared encoder passed to temporal predictor
+2025-06-27 14:46:53,774 - RiskNICLP-5G - INFO - train.py:457 - 🚀 Temporal predictor (hetero_lstm) initialized successfully
+2025-06-27 14:46:54,355 - RiskNICLP-5G - INFO - train.py:472 - 📊 Setting up evaluator...
+2025-06-27 14:46:54,355 - RiskNICLP-5G - INFO - train.py:547 - 🚀 Starting training...
+2025-06-27 14:46:54,355 - RiskNICLP-5G - INFO - training.py:123 - 🔒 Risk parameters frozen for basic phase
+2025-06-27 14:46:54,444 - RiskNICLP-5G - ERROR - train.py:606 - ❌ Training failed: Caught NameError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "/home/yangyiting/miniconda3/envs/riskniclp-env/lib/python3.10/site-packages/torch/utils/data/_utils/worker.py", line 308, in _worker_loop
+    data = fetcher.fetch(index)
+  File "/home/yangyiting/miniconda3/envs/riskniclp-env/lib/python3.10/site-packages/torch/utils/data/_utils/fetch.py", line 51, in fetch
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "/home/yangyiting/miniconda3/envs/riskniclp-env/lib/python3.10/site-packages/torch/utils/data/_utils/fetch.py", line 51, in <listcomp>
+    data = [self.dataset[idx] for idx in possibly_batched_index]
+  File "/home/yangyiting/workspace/5g-nidd-project/src/data/data_splits.py", line 84, in __getitem__
+    return self.dataset[original_idx]
+  File "/home/yangyiting/workspace/5g-nidd-project/src/data/graph_dataset.py", line 515, in __getitem__
+    raise e
+  File "/home/yangyiting/workspace/5g-nidd-project/src/data/graph_dataset.py", line 432, in __getitem__
+    print(f"✅ 权威边标签生成完成: 攻击场景={is_attack_scenario}, 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)}")
+NameError: name 'is_attack_scenario' is not defined
+
+2025-06-27 14:46:54,444 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
+2025-06-27 14:48:37,639 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
+2025-06-27 14:48:37,639 - RiskNICLP-5G - INFO - train.py:287 - 🚀 Starting experiment: riskniclp_baseline_20250627_144837
+2025-06-27 14:48:37,639 - RiskNICLP-5G - INFO - train.py:288 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 0.5, 'beta_2': 0.5, 'temperature': 0.1}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.3, 'UDPFlood': 0.4, 'SYNFlood': 0.6, 'HTTPFlood': 0.7, 'SlowrateDoS': 0.8, 'TCPConnectScan': 0.7, 'SYNScan': 0.6, 'UDPScan': 0.5}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250627_144837', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-06-27 14:48:37,640 - RiskNICLP-5G - INFO - train.py:531 - 🖥️ Device: cpu
+2025-06-27 14:48:37,640 - RiskNICLP-5G - INFO - train.py:532 - 🧵 Threads: 8
+2025-06-27 14:48:37,640 - RiskNICLP-5G - INFO - train.py:295 - 📊 Preparing data processing pipeline...
+2025-06-27 14:48:37,641 - RiskNICLP-5G - INFO - train.py:322 - 🎯 启用负采样策略: semantic, 负样本比例: 3:1
+2025-06-27 14:48:37,642 - RiskNICLP-5G - INFO - train.py:342 - 🔄 Fitting data processors...
+2025-06-27 14:48:37,644 - RiskNICLP-5G - INFO - train.py:353 - 📈 Data splits: Train=60, Val=7, Test=8
+2025-06-27 14:48:37,644 - RiskNICLP-5G - INFO - train.py:397 - 🏗️ Creating model architecture...
+2025-06-27 14:48:37,650 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 57710.0000, model/trainable_parameters: 57710.0000, model/non_trainable_parameters: 0.0000
+2025-06-27 14:48:37,650 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 57,710 total parameters, 57,710 trainable
+2025-06-27 14:48:37,650 - RiskNICLP-5G - INFO - train.py:427 - 🏃 Setting up progressive trainer...
+2025-06-27 14:48:37,650 - RiskNICLP-5G - INFO - train.py:437 - 🕐 Initializing temporal predictor: hetero_lstm
+2025-06-27 14:48:37,650 - RiskNICLP-5G - INFO - train.py:444 - ✅ Shared encoder passed to temporal predictor
+2025-06-27 14:48:37,651 - RiskNICLP-5G - INFO - train.py:457 - 🚀 Temporal predictor (hetero_lstm) initialized successfully
+2025-06-27 14:48:38,197 - RiskNICLP-5G - INFO - train.py:472 - 📊 Setting up evaluator...
+2025-06-27 14:48:38,198 - RiskNICLP-5G - INFO - train.py:547 - 🚀 Starting training...
+2025-06-27 14:48:38,198 - RiskNICLP-5G - INFO - training.py:123 - 🔒 Risk parameters frozen for basic phase
+2025-06-27 14:49:50,360 - RiskNICLP-5G - INFO - train.py:602 - ⏹️ Training interrupted by user
+2025-06-27 14:49:50,360 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
+2025-06-27 14:51:03,614 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
+2025-06-27 14:51:03,614 - RiskNICLP-5G - INFO - train.py:288 - 🚀 Starting experiment: riskniclp_baseline_20250627_145103
+2025-06-27 14:51:03,614 - RiskNICLP-5G - INFO - train.py:289 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.1, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=20, learning_rate='1e-3', weight_decay='1e-4', direction_penalty_weight=2.0, basic_epochs=5, risk_aware_epochs=10, basic_auc_threshold=0.8, risk_recall_threshold=0.75, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=1.0, scheduler_type='cosine', warmup_epochs=2, eta_min_ratio=0.01), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 0.5, 'beta_2': 0.5, 'temperature': 0.1}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.3, 'UDPFlood': 0.4, 'SYNFlood': 0.6, 'HTTPFlood': 0.7, 'SlowrateDoS': 0.8, 'TCPConnectScan': 0.7, 'SYNScan': 0.6, 'UDPScan': 0.5}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250627_145103', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-06-27 14:51:03,614 - RiskNICLP-5G - INFO - train.py:532 - 🖥️ Device: cpu
+2025-06-27 14:51:03,614 - RiskNICLP-5G - INFO - train.py:533 - 🧵 Threads: 8
+2025-06-27 14:51:03,614 - RiskNICLP-5G - INFO - train.py:296 - 📊 Preparing data processing pipeline...
+2025-06-27 14:51:03,616 - RiskNICLP-5G - INFO - train.py:323 - 🎯 启用负采样策略: semantic, 负样本比例: 3:1
+2025-06-27 14:51:03,617 - RiskNICLP-5G - INFO - train.py:343 - 🔄 Fitting data processors...
+2025-06-27 14:51:03,619 - RiskNICLP-5G - INFO - train.py:354 - 📈 Data splits: Train=60, Val=7, Test=8
+2025-06-27 14:51:03,620 - RiskNICLP-5G - INFO - train.py:398 - 🏗️ Creating model architecture...
+2025-06-27 14:51:03,629 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 57710.0000, model/trainable_parameters: 57710.0000, model/non_trainable_parameters: 0.0000
+2025-06-27 14:51:03,629 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 57,710 total parameters, 57,710 trainable
+2025-06-27 14:51:03,629 - RiskNICLP-5G - INFO - train.py:428 - 🏃 Setting up progressive trainer...
+2025-06-27 14:51:03,629 - RiskNICLP-5G - INFO - train.py:438 - 🕐 Initializing temporal predictor: hetero_lstm
+2025-06-27 14:51:03,629 - RiskNICLP-5G - INFO - train.py:445 - ✅ Shared encoder passed to temporal predictor
+2025-06-27 14:51:03,631 - RiskNICLP-5G - INFO - train.py:458 - 🚀 Temporal predictor (hetero_lstm) initialized successfully
+2025-06-27 14:51:04,171 - RiskNICLP-5G - INFO - train.py:473 - 📊 Setting up evaluator...
+2025-06-27 14:51:04,171 - RiskNICLP-5G - INFO - train.py:548 - 🚀 Starting training...
+2025-06-27 14:51:04,171 - RiskNICLP-5G - INFO - training.py:123 - 🔒 Risk parameters frozen for basic phase
+2025-06-27 14:54:25,486 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 1/20 [BASIC]: Train Loss: 0.7491, Val AUC: 0.6174, Phase: Basic GNN feature learning
+2025-06-27 14:54:25,487 - RiskNICLP-5G - INFO - training.py:649 - Checkpoint saved: best_model.pt
+2025-06-27 14:54:25,488 - RiskNICLP-5G - INFO - training.py:200 - 💾 New best model saved (AUC: 0.6174)
+2025-06-27 14:57:30,691 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 2/20 [BASIC]: Train Loss: 0.7459, Val AUC: 0.6087, Phase: Basic GNN feature learning
+2025-06-27 15:00:04,655 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 3/20 [BASIC]: Train Loss: 0.7470, Val AUC: 0.5996, Phase: Basic GNN feature learning
+2025-06-27 15:03:07,942 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 4/20 [BASIC]: Train Loss: 0.7471, Val AUC: 0.5889, Phase: Basic GNN feature learning
+2025-06-27 15:06:29,694 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 5/20 [BASIC]: Train Loss: 0.7467, Val AUC: 0.5827, Phase: Basic GNN feature learning
+2025-06-27 15:06:30,908 - RiskNICLP-5G - INFO - training.py:153 - 🔄 Advancing from basic to risk_aware phase (reason: epoch limit reached)
+2025-06-27 15:06:30,908 - RiskNICLP-5G - INFO - training.py:167 - 🔓 Risk parameters unfrozen for risk-aware phase
+2025-06-27 15:09:33,581 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 6/20 [RISK_AWARE]: Train Loss: 0.7463, Val AUC: 0.5830, Phase: Risk-aware attention training
+2025-06-27 15:13:01,833 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 7/20 [RISK_AWARE]: Train Loss: 0.7465, Val AUC: 0.5806, Phase: Risk-aware attention training
+2025-06-27 15:15:33,706 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 8/20 [RISK_AWARE]: Train Loss: 0.7460, Val AUC: 0.5796, Phase: Risk-aware attention training
+2025-06-27 15:18:13,429 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 9/20 [RISK_AWARE]: Train Loss: 0.7459, Val AUC: 0.5757, Phase: Risk-aware attention training
+2025-06-27 15:20:44,988 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 10/20 [RISK_AWARE]: Train Loss: 0.7455, Val AUC: 0.5765, Phase: Risk-aware attention training
+2025-06-27 15:24:37,032 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 11/20 [RISK_AWARE]: Train Loss: 0.7467, Val AUC: 0.5696, Phase: Risk-aware attention training
+2025-06-27 15:27:46,778 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 12/20 [RISK_AWARE]: Train Loss: 0.7457, Val AUC: 0.5697, Phase: Risk-aware attention training
+2025-06-27 15:31:44,377 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 13/20 [RISK_AWARE]: Train Loss: 0.7457, Val AUC: 0.5673, Phase: Risk-aware attention training
+2025-06-27 15:34:14,250 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 14/20 [RISK_AWARE]: Train Loss: 0.7464, Val AUC: 0.5649, Phase: Risk-aware attention training
+2025-06-27 15:36:43,982 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 15/20 [RISK_AWARE]: Train Loss: 0.7465, Val AUC: 0.5651, Phase: Risk-aware attention training
+2025-06-27 15:36:45,009 - RiskNICLP-5G - INFO - training.py:153 - 🔄 Advancing from risk_aware to full_fusion phase (reason: epoch limit reached)
+2025-06-27 15:36:45,009 - RiskNICLP-5G - INFO - training.py:171 - 🚀 Full fusion phase activated
+2025-06-27 15:40:39,948 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 16/20 [FULL_FUSION]: Train Loss: 0.7458, Val AUC: 0.5635, Phase: Complete model optimization
+2025-06-27 15:42:56,483 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 17/20 [FULL_FUSION]: Train Loss: 0.7459, Val AUC: 0.5637, Phase: Complete model optimization
+2025-06-27 15:45:03,039 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 18/20 [FULL_FUSION]: Train Loss: 0.7468, Val AUC: 0.5635, Phase: Complete model optimization
+2025-06-27 15:49:00,722 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 19/20 [FULL_FUSION]: Train Loss: 0.7463, Val AUC: 0.5623, Phase: Complete model optimization
+2025-06-27 15:52:02,918 - RiskNICLP-5G - INFO - training.py:188 - 📊 Epoch 20/20 [FULL_FUSION]: Train Loss: 0.7462, Val AUC: 0.5617, Phase: Complete model optimization
+2025-06-27 15:52:02,918 - RiskNICLP-5G - INFO - training.py:203 - ✅ Progressive training completed. Best AUC: 0.6174
+2025-06-27 15:52:02,918 - RiskNICLP-5G - INFO - train.py:555 - 🎯 Running final evaluation...
+2025-06-27 15:52:02,918 - RiskNICLP-5G - INFO - evaluator.py:61 - 🎯 Starting evaluation on test set...
+2025-06-27 15:52:05,481 - RiskNICLP-5G - INFO - evaluator.py:243 - 🔄 负采样效果: 平衡度 0.729, 质量 0.500, 分离度 0.000, 综合评分 0.369
+2025-06-27 15:52:05,481 - RiskNICLP-5G - INFO - evaluator.py:525 - 📊 Evaluation Results for test:
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:530 - 🚨 P0 - Real-time Security:
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:532 -   lead_time_mean: 1.3841
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:532 -   lead_time_std: 0.9324
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:532 -   mttd_30s: 30.0000
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:537 - 🎯 P1 - Detection Quality:
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:539 -   risk_weighted_precision: 0.3643
+2025-06-27 15:52:05,482 - RiskNICLP-5G - INFO - evaluator.py:539 -   risk_weighted_recall: 1.0000
+2025-06-27 15:52:05,483 - RiskNICLP-5G - INFO - evaluator.py:539 -   aupr: 0.4669
+2025-06-27 15:52:05,483 - RiskNICLP-5G - INFO - evaluator.py:544 - 📍 P2 - Directional Accuracy:
+2025-06-27 15:52:05,483 - RiskNICLP-5G - INFO - evaluator.py:546 -   directional_hit_100: 1.0000
+2025-06-27 15:52:05,483 - RiskNICLP-5G - INFO - evaluator.py:546 -   direction_error_rate: 0.0000
+2025-06-27 15:52:05,483 - RiskNICLP-5G - INFO - evaluator.py:551 - 📈 P3 - Traditional Metrics:
+2025-06-27 15:52:05,483 - RiskNICLP-5G - INFO - evaluator.py:553 -   auc: 0.5624
+2025-06-27 15:52:05,484 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_10: 0.6000
+2025-06-27 15:52:05,484 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_50: 0.3000
+2025-06-27 15:52:05,484 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_100: 0.4200
+2025-06-27 15:52:05,485 - RiskNICLP-5G - INFO - evaluator.py:599 - 💾 Evaluation results saved to logs/evaluation_test.json
+2025-06-27 15:52:05,486 - RiskNICLP-5G - INFO - train.py:562 - 📊 Test Results:
+2025-06-27 15:52:05,486 - RiskNICLP-5G - INFO - train.py:564 -   p0_lead_time_mean: 1.3841
+2025-06-27 15:52:05,486 - RiskNICLP-5G - INFO - train.py:564 -   p0_lead_time_std: 0.9324
+2025-06-27 15:52:05,486 - RiskNICLP-5G - INFO - train.py:564 -   p0_mttd_30s: 30.0000
+2025-06-27 15:52:05,486 - RiskNICLP-5G - INFO - train.py:564 -   p1_risk_weighted_precision: 0.3643
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p1_risk_weighted_recall: 1.0000
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p1_aupr: 0.4669
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p2_directional_hit_100: 1.0000
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p2_direction_error_rate: 0.0000
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p3_auc: 0.5624
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p3_hit_10: 0.6000
+2025-06-27 15:52:05,487 - RiskNICLP-5G - INFO - train.py:564 -   p3_hit_50: 0.3000
+2025-06-27 15:52:05,488 - RiskNICLP-5G - INFO - train.py:564 -   p3_hit_100: 0.4200
+2025-06-27 15:52:05,488 - RiskNICLP-5G - INFO - train.py:564 -   ns_sampling_balance_ratio: 0.7292
+2025-06-27 15:52:05,488 - RiskNICLP-5G - INFO - train.py:564 -   ns_negative_sample_quality: 0.5000
+2025-06-27 15:52:05,488 - RiskNICLP-5G - INFO - train.py:564 -   ns_positive_negative_separation: 0.0000
+2025-06-27 15:52:05,488 - RiskNICLP-5G - INFO - train.py:564 -   ns_sampling_diversity_score: 0.0000
+2025-06-27 15:52:05,488 - RiskNICLP-5G - INFO - train.py:564 -   ns_overall_negative_sampling_score: 0.3688
+2025-06-27 15:52:05,492 - RiskNICLP-5G - INFO - train.py:570 - 💾 Model saved to: logs/riskniclp_baseline_20250627_145103/final_model.pt
+2025-06-27 15:52:05,492 - RiskNICLP-5G - INFO - train.py:572 - ✅ Training completed successfully!
+2025-06-27 15:52:05,493 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed
