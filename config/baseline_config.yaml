@@ -19,7 +19,7 @@ model:
   num_heads: 4                 # GAT attention heads
   num_layers: 2                # Number of GNN layers
   dropout: 0.1                 # Dropout rate
-  temperature: 0.1             # Attention temperature
+  temperature: 0.2             # Attention temperature
   gravity_epsilon: 1e-3        # RiskGravity decoder epsilon
 
 # Phase 2 Configuration
@@ -28,9 +28,9 @@ phase2:
   risk_bias_attention:
     enabled: true              # Enable risk-bias attention
     method: 'simplified'       # 'simplified' | 'full'
-    beta_1: 0.5                # Source node risk weight
-    beta_2: 0.5                # Destination node risk weight
-    temperature: 0.1           # Risk bias temperature
+    beta_1: 1.5                # Source node risk weight
+    beta_2: 1.5                # Destination node risk weight
+    temperature: 0.2           # Risk bias temperature
     
   # Negative Sampling
   negative_sampling:
@@ -45,14 +45,14 @@ phase2:
     # Attack semantic mapping for risk-aware sampling
     attack_type_mapping:
       'Benign': 0.0
-      'ICMPFlood': 0.3
-      'UDPFlood': 0.4
-      'SYNFlood': 0.6
-      'HTTPFlood': 0.7
-      'SlowrateDoS': 0.8
-      'TCPConnectScan': 0.7
-      'SYNScan': 0.6
-      'UDPScan': 0.5
+      'ICMPFlood': 0.4
+      'UDPFlood': 0.5
+      'SYNFlood': 0.7
+      'HTTPFlood': 0.8
+      'SlowrateDoS': 0.9
+      'TCPConnectScan': 0.8
+      'SYNScan': 0.7
+      'UDPScan': 0.6
       
     # Sampling quality control
     max_attempts_multiplier: 10  # Maximum attempts multiplier
@@ -114,26 +114,26 @@ training:
   mode: 'standard'             # Training mode: 'standard' | 'temporal'
   batch_size: 2                # CPU-friendly batch size
   accumulate_steps: 2          # Gradient accumulation for effective batch=4
-  max_epochs: 20               # Maximum training epochs
-  learning_rate: 1e-3          # Initial learning rate
-  weight_decay: 1e-4           # L2 regularization
+  max_epochs: 10               # ✨ v1.3验证: 减少到10 epochs快速验证修复效果
+  learning_rate: 2e-3          # Initial learning rate
+  weight_decay: 5e-5           # L2 regularization
   direction_penalty_weight: 2.0 # λ_dir for directional loss
   
-  # Progressive Training
-  basic_epochs: 5              # Basic GNN training epochs
-  risk_aware_epochs: 10        # Risk-aware training epochs
-  basic_auc_threshold: 0.80    # Threshold to switch to risk-aware
-  risk_recall_threshold: 0.75  # Risk recall threshold
+  # Progressive Training - 🔥 快速验证修复效果
+  basic_epochs: 2              # 🚀 从5改为1，快速跳过basic阶段
+  risk_aware_epochs: 6         # 🚀 从10改为8，重点验证risk_aware阶段
+  basic_auc_threshold: 0.55    # 🚀 降低阈值，更容易触发阶段切换
+  risk_recall_threshold: 0.65  # 🚀 降低阈值，更容易推进
   
   # Optimization
   enable_bf16: False            # Disable bfloat16 for CPU acceleration
   enable_gradient_checkpointing: True  # Memory-efficient training
-  gradient_clip_norm: 1.0      # Gradient clipping
+  gradient_clip_norm: 2.0      # Gradient clipping
   
   # Scheduler
   scheduler_type: cosine       # Learning rate scheduler
-  warmup_epochs: 2             # Warmup epochs
-  eta_min_ratio: 0.01          # Minimum LR ratio
+  warmup_epochs: 1             # 🚀 从2改为1，快速预热
+  eta_min_ratio: 0.1           # Minimum LR ratio
 
 # Data Configuration  
 data:

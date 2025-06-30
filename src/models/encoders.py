@@ -380,18 +380,24 @@ class SharedEncoder(nn.Module):
         
         self.input_dim = input_dim  # 统一输入维度 (61 = 45特征 + 16风险)
         self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
         
-        # 简化版编码器 - 避免复杂的异质图处理
-        self.node_encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim * 2),
-            nn.LayerNorm(hidden_dim * 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout * 0.5)
-        )
+        # 🔥 关键修复：使用真正的风险偏置图注意力机制
+        from .risk_bias_attention import TrueRiskBiasGATConv
+        
+        # 输入投影层
+        self.input_proj = nn.Linear(input_dim, hidden_dim)
+        
+        # 🔥 风险偏置GAT层（替换简化版node_encoder）
+        self.risk_bias_layers = nn.ModuleList()
+        for i in range(num_layers):
+            layer = TrueRiskBiasGATConv(
+                in_feats=hidden_dim,
+                out_feats=hidden_dim,
+                num_heads=num_heads,
+                dropout=dropout
+            )
+            self.risk_bias_layers.append(layer)
         
         # 节点类型感知的后处理层
         self.type_adapters = nn.ModuleDict({
@@ -400,20 +406,76 @@ class SharedEncoder(nn.Module):
             'Alert': nn.Linear(hidden_dim, hidden_dim)
         })
         
+        # 正规化和dropout
+        self.norm = nn.LayerNorm(hidden_dim)
+        self.dropout = nn.Dropout(dropout)
+        
         self.logger = get_logger()
         
-        print(f"🔧 SharedEncoder初始化:")
+        print(f"🔥 SharedEncoder修复版初始化:")
         print(f"  输入维度: {input_dim} → 隐藏维度: {hidden_dim}")
+        print(f"  风险偏置GAT层数: {num_layers}, 注意力头数: {num_heads}")
         print(f"  支持节点类型: {list(self.type_adapters.keys())}")
         
     def freeze_risk_params(self):
         """冻结风险参数 (渐进训练用)"""
-        # 简化版：无需冻结参数
-        pass
+        print("🔒 开始冻结SharedEncoder中的风险偏置参数")
+        frozen_count = 0
+        
+        # 检查risk_bias_layers是否存在
+        if not hasattr(self, 'risk_bias_layers'):
+            print("❌ 错误：SharedEncoder没有risk_bias_layers属性")
+            return
+        
+        print(f"🔍 发现 {len(self.risk_bias_layers)} 个风险偏置层")
+        
+        for layer_idx, layer in enumerate(self.risk_bias_layers):
+            print(f"  检查层 {layer_idx}: {type(layer).__name__}")
+            
+            # 检查每个参数
+            for param_name in ['beta_src', 'beta_dst', 'temperature']:
+                if hasattr(layer, param_name):
+                    param = getattr(layer, param_name)
+                    if isinstance(param, nn.Parameter):
+                        param.requires_grad_(False)
+                        frozen_count += 1
+                        print(f"    ✅ 冻结 {param_name}: {param.shape} -> requires_grad={param.requires_grad}")
+                    else:
+                        print(f"    ⚠️ {param_name} 不是nn.Parameter: {type(param)}")
+                else:
+                    print(f"    ❌ 缺少参数 {param_name}")
+        
+        print(f"🔒 冻结完成，总共冻结了 {frozen_count} 个参数")
         
     def unfreeze_risk_params(self):
-        """解冻风险参数"""
-        pass
+        """解冻风险参数 - SOTA实现"""
+        print("🔓 开始解冻SharedEncoder中的风险偏置参数")
+        unfrozen_count = 0
+        
+        # 检查risk_bias_layers是否存在
+        if not hasattr(self, 'risk_bias_layers'):
+            print("❌ 错误：SharedEncoder没有risk_bias_layers属性")
+            return
+        
+        print(f"🔍 发现 {len(self.risk_bias_layers)} 个风险偏置层")
+        
+        for layer_idx, layer in enumerate(self.risk_bias_layers):
+            print(f"  检查层 {layer_idx}: {type(layer).__name__}")
+            
+            # 检查每个参数
+            for param_name in ['beta_src', 'beta_dst', 'temperature']:
+                if hasattr(layer, param_name):
+                    param = getattr(layer, param_name)
+                    if isinstance(param, nn.Parameter):
+                        param.requires_grad_(True)
+                        unfrozen_count += 1
+                        print(f"    ✅ 解冻 {param_name}: {param.shape} -> requires_grad={param.requires_grad}")
+                    else:
+                        print(f"    ⚠️ {param_name} 不是nn.Parameter: {type(param)}")
+                else:
+                    print(f"    ❌ 缺少参数 {param_name}")
+        
+        print(f"🔓 解冻完成，总共解冻了 {unfrozen_count} 个参数")
     
     def forward(
         self,
@@ -422,18 +484,16 @@ class SharedEncoder(nn.Module):
         risk_scores: Optional[Dict[str, torch.Tensor]] = None
     ) -> Dict[str, torch.Tensor]:
         """
-        简化的前向传播 - 按节点类型独立编码
+        🔥 修复版前向传播 - 使用真正的风险偏置图注意力
         
         Args:
-            graph: DGL异质图 (暂时不使用图结构，避免维度问题)
+            graph: DGL异质图 - 现在真正使用图结构！
             node_features: {节点类型: 特征张量} - 已经是61维 (45+16)
-            risk_scores: {节点类型: 风险分数} (可选)
+            risk_scores: {节点类型: 风险分数} (必需)
             
         Returns:
             {节点类型: 嵌入张量} - 都是hidden_dim维
         """
-        
-        embeddings = {}
         
         # 减少调试输出频率
         if hasattr(self, '_debug_counter'):
@@ -441,36 +501,90 @@ class SharedEncoder(nn.Module):
         else:
             self._debug_counter = 0
             
-        # 只在特定条件下输出调试信息
-        debug_enabled = self._debug_counter % 100 == 0  # 每100次调用输出一次
+        debug_enabled = self._debug_counter % 100 == 0
         
         if debug_enabled:
-            print(f"🔍 SharedEncoder处理:")
+            print(f"🔥 SharedEncoder修复版处理:")
+            print(f"  图结构: {graph.num_nodes()}节点, {graph.num_edges()}边")
         
-        for ntype, features in node_features.items():
+        # 🔥 关键修复：构建同质图进行消息传递
+        # 1. 合并所有节点特征和风险分数
+        all_features = []
+        all_risk_scores = []
+        node_type_map = {}  # 记录每种类型的节点索引范围
+        current_offset = 0
+        
+        for ntype in node_features:
+            features = node_features[ntype]
             if len(features) == 0:
-                embeddings[ntype] = torch.empty(0, self.hidden_dim)
                 continue
                 
-            if debug_enabled:
-                print(f"  处理 {ntype}: {features.shape}")
+            # 投影到隐藏维度
+            projected_features = self.input_proj(features)
+            all_features.append(projected_features)
             
-            # 1. 通用编码
-            encoded = self.node_encoder(features)  # [N, hidden_dim]
-            
-            # 2. 类型特异化
-            if ntype in self.type_adapters:
-                adapted = self.type_adapters[ntype](encoded)
+            # 获取对应的风险分数
+            if risk_scores and ntype in risk_scores:
+                all_risk_scores.append(risk_scores[ntype])
             else:
-                adapted = encoded
-                if debug_enabled:
-                    print(f"  ⚠️ 未找到 {ntype} 的适配器，使用通用编码")
+                # 默认风险分数
+                default_risk = {'Alert': 0.8, 'Flow': 0.3, 'UE': 0.1}.get(ntype, 0.2)
+                all_risk_scores.append(torch.full((len(features),), default_risk))
             
-            embeddings[ntype] = adapted
+            # 记录节点类型映射
+            node_type_map[ntype] = (current_offset, current_offset + len(features))
+            current_offset += len(features)
+            
             if debug_enabled:
-                print(f"  ✅ {ntype} 编码完成: {adapted.shape}")
+                print(f"    {ntype}: {features.shape} → {projected_features.shape}")
+        
+        if not all_features:
+            return {}
+        
+        # 合并特征和风险分数
+        combined_features = torch.cat(all_features, dim=0)  # [total_nodes, hidden_dim]
+        combined_risk_scores = torch.cat(all_risk_scores, dim=0)  # [total_nodes]
         
         if debug_enabled:
-            print(f"📊 SharedEncoder输出: {list(embeddings.keys())}")
+            print(f"  合并特征: {combined_features.shape}, 风险分数: {combined_risk_scores.shape}")
+        
+        # 🔥 2. 创建同质图视图进行消息传递
+        homo_graph = dgl.to_homogeneous(graph)
+        
+        # 🔥 3. 应用风险偏置GAT层
+        h = combined_features
+        for i, risk_layer in enumerate(self.risk_bias_layers):
+            h_new = risk_layer(homo_graph, h, combined_risk_scores)
+            h_new = self.dropout(h_new)
+            
+            # 残差连接
+            if h.shape == h_new.shape:
+                h = h + h_new
+            else:
+                h = h_new
+                
+            h = self.norm(h)
+            
+            if debug_enabled:
+                print(f"    GAT层{i+1}: {h.shape}")
+        
+        # 🔥 4. 按节点类型分割并应用类型适配器
+        embeddings = {}
+        for ntype, (start_idx, end_idx) in node_type_map.items():
+            type_embeddings = h[start_idx:end_idx]  # [num_nodes_of_type, hidden_dim]
+            
+            # 应用类型适配器
+            if ntype in self.type_adapters:
+                adapted_embeddings = self.type_adapters[ntype](type_embeddings)
+            else:
+                adapted_embeddings = type_embeddings
+                
+            embeddings[ntype] = adapted_embeddings
+            
+            if debug_enabled:
+                print(f"  ✅ {ntype} 最终嵌入: {adapted_embeddings.shape}")
+        
+        if debug_enabled:
+            print(f"📊 SharedEncoder修复版输出: {list(embeddings.keys())}")
         
         return embeddings 

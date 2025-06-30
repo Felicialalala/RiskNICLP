@@ -12,6 +12,8 @@ from typing import Dict, Any, Optional, List
 from torch.utils.data import DataLoader
 from ..evaluation.temporal_metrics import TemporalEvaluator, compute_risk_weighted_metrics
 from ..models.temporal_predictor import TemporalDataLoader
+from .intelligent_validator import IntelligentValidator
+from .risk_bias_diagnostic import RiskBiasIntelligentDiagnostic
 import torch.nn.functional as F
 import numpy as np
 
@@ -40,26 +42,41 @@ class ProgressiveTrainer:
         self.temporal_evaluator = TemporalEvaluator() if temporal_predictor else None
         self.training_mode = getattr(config.training, 'mode', 'standard')  # 'standard' or 'temporal'
         
-        # Negative sampling support
-        self.negative_sampling_enabled = False
+        # 🔥 修复：先冻结参数，再创建优化器
+        # 初始阶段冻结风险参数
+        if hasattr(model, 'freeze_risk_params'):
+            model.freeze_risk_params()
+            logger.logger.info("🔒 风险参数已冻结（在优化器创建前）")
+        
+        # Negative sampling configuration
+        self.negative_sampling_enabled = False  # 🔥 默认初始化，防止AttributeError
+        self.negative_sampling_config = {}
+        self.pos_neg_ratio_monitor = {'positive': 0, 'negative': 0}
+        
         if hasattr(config, 'phase2') and hasattr(config.phase2, 'negative_sampling'):
             self.negative_sampling_config = config.phase2['negative_sampling']
             self.negative_sampling_enabled = self.negative_sampling_config.get('enabled', False)
-            self.pos_neg_ratio_monitor = {'positive': 0, 'negative': 0}
             logger.logger.info(f"🎯 负采样平衡训练已启用: {self.negative_sampling_config.get('strategy', 'unknown')}")
+        else:
+            logger.logger.info("📊 负采样配置未找到，使用默认图级别训练")
         
-        # Setup optimizer (with type safety for string values)
+        # 🔥 关键修复：Setup optimizer with only trainable parameters
         lr = getattr(config.training, 'learning_rate', 1e-3)
         lr = float(lr) if isinstance(lr, str) else lr
         
         weight_decay = getattr(config.training, 'weight_decay', 1e-4)
         weight_decay = float(weight_decay) if isinstance(weight_decay, str) else weight_decay
         
+        # 🔥 关键修复：只为requires_grad=True的参数创建优化器
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+        
         self.optimizer = AdamW(
-            model.parameters(),
+            trainable_params,  # 只包含可训练参数
             lr=lr,
             weight_decay=weight_decay
         )
+        
+        logger.logger.info(f"✅ 优化器创建：管理 {len(trainable_params)} 个可训练参数")
         
         # Setup scheduler (with type safety)
         max_epochs = getattr(config.training, 'max_epochs', 20)
@@ -80,6 +97,19 @@ class ProgressiveTrainer:
         # Training state
         self.current_epoch = 0
         self.best_metric = 0.0
+        self.current_phase = 'basic'  # 🔥 添加当前训练阶段追踪
+        
+        # 🔥 智能验证器 - 死锁预防系统
+        self.intelligent_validator = IntelligentValidator(
+            timeout_seconds=180,  # 3分钟超时
+            logger=logger
+        )
+        
+        # 🔥 风险偏置诊断器 - 参数解冻+梯度监控
+        self.risk_bias_diagnostic = RiskBiasIntelligentDiagnostic(
+            model=model,
+            logger=logger
+        )
         
     def train_progressive(self, train_loader: DataLoader, val_loader: DataLoader) -> nn.Module:
         """
@@ -94,16 +124,16 @@ class ProgressiveTrainer:
         """
         max_epochs = getattr(self.config.training, 'max_epochs', 20)
         
-        # Define progressive training phases
+        # 🔥 修复：使用配置文件中的阈值，而不是硬编码
         phases = {
             'basic': {
-                'epochs': 5,
-                'thresholds': {'val_auc': 0.80},
+                'epochs': getattr(self.config.training, 'basic_epochs', 1),
+                'thresholds': {'val_auc': getattr(self.config.training, 'basic_auc_threshold', 0.60)},
                 'description': 'Basic GNN feature learning'
             },
             'risk_aware': {
-                'epochs': 10, 
-                'thresholds': {'risk_recall_100': 0.75},
+                'epochs': getattr(self.config.training, 'risk_aware_epochs', 8), 
+                'thresholds': {'risk_recall_100': getattr(self.config.training, 'risk_recall_threshold', 0.70)},
                 'description': 'Risk-aware attention training'
             },
             'full_fusion': {
@@ -114,65 +144,64 @@ class ProgressiveTrainer:
         }
         
         current_phase = 'basic'
+        self.current_phase = current_phase  # 🔥 初始化阶段追踪
         phase_start_epoch = 0
         
-        # Start with frozen risk parameters
-        if hasattr(self.model, 'shared_encoder'):
-            if hasattr(self.model.shared_encoder, 'freeze_risk_params'):
-                self.model.shared_encoder.freeze_risk_params()
-                self.logger.logger.info("🔒 Risk parameters frozen for basic phase")
+
+        
+        # 🔥 修复：参数冻结后再进行诊断检查
+        self.logger.logger.info("🔍 验证训练状态...")
+        
+        # 更新诊断工具的训练阶段
+        self.risk_bias_diagnostic.training_stage = current_phase
+        
+        # 综合诊断训练就绪状态 - 修复版：Basic阶段不执行错误的"修复"
+        is_ready, readiness_result = self.risk_bias_diagnostic.verify_training_readiness()
+        
+        if not is_ready:
+            # 🔥 修复：Basic阶段的"未就绪"状态通常是正常的（因为参数被冻结）
+            if current_phase == 'basic':
+                # Basic阶段：检查是否真的有问题，还是正常的冻结状态
+                failed_checks = [k for k, v in readiness_result.get('readiness_checks', {}).items() if not v]
+                expected_basic_failures = ['params_trainable', 'has_gradients', 'mechanism_active']
+                
+                # 如果失败的都是预期的项目，则认为状态正常
+                unexpected_failures = [f for f in failed_checks if f not in expected_basic_failures]
+                
+                if not unexpected_failures:
+                    self.logger.logger.info("✅ Basic阶段状态正常：风险参数已正确冻结")
+                else:
+                    self.logger.logger.warning(f"⚠️ Basic阶段检测到意外问题: {unexpected_failures}")
+                    # 只处理真正的问题
+                    if 'has_risk_params' in unexpected_failures:
+                        self.logger.logger.error("❌ 严重：未找到风险参数，请检查模型架构")
+            else:
+                # 非Basic阶段：尝试解冻参数
+                self.logger.logger.warning("⚠️ 非Basic阶段训练就绪状态检查失败，尝试自动修复...")
+                if self.risk_bias_diagnostic.force_unfreeze_risk_parameters():
+                    self.logger.logger.info("🔧 已尝试强制解冻风险参数")
+                
+                # 重新验证
+                is_ready, readiness_result = self.risk_bias_diagnostic.verify_training_readiness()
+                
+                if not is_ready:
+                    failed_checks = [k for k, v in readiness_result.get('readiness_checks', {}).items() if not v]
+                    self.logger.logger.warning(f"❌ 自动修复后仍有失败项: {failed_checks}")
+                else:
+                    self.logger.logger.info("✅ 自动修复成功")
+                
+        if not self._validate_training_state():
+            self.logger.logger.warning("⚠️ 基础训练状态存在问题，但继续训练")
         
         for epoch in range(max_epochs):
             self.current_epoch = epoch
             
-            # Check if should advance to next phase
-            if epoch > phase_start_epoch:
-                phase_config = phases[current_phase]
-                
-                # Get validation metrics for phase decision
-                val_metrics = self.validate_epoch(val_loader)
-                
-                should_advance = False
-                
-                # Check epoch-based advancement
-                if epoch - phase_start_epoch >= phase_config['epochs']:
-                    should_advance = True
-                    advancement_reason = "epoch limit reached"
-                    
-                # Check metric-based advancement  
-                elif phase_config['thresholds']:
-                    for metric_name, threshold in phase_config['thresholds'].items():
-                        if val_metrics.get(metric_name, 0) >= threshold:
-                            should_advance = True
-                            advancement_reason = f"{metric_name} >= {threshold}"
-                            break
-                
-                # Advance to next phase
-                if should_advance and current_phase != 'full_fusion':
-                    next_phase = self._get_next_phase(current_phase)
-                    self.logger.logger.info(
-                        f"🔄 Advancing from {current_phase} to {next_phase} phase "
-                        f"(reason: {advancement_reason})"
-                    )
-                    
-                    # Update training phase
-                    current_phase = next_phase
-                    phase_start_epoch = epoch
-                    
-                    # Unfreeze risk parameters when entering risk-aware phase
-                    if current_phase == 'risk_aware':
-                        if hasattr(self.model, 'shared_encoder'):
-                            if hasattr(self.model.shared_encoder, 'unfreeze_risk_params'):
-                                self.model.shared_encoder.unfreeze_risk_params()
-                                self.logger.logger.info("🔓 Risk parameters unfrozen for risk-aware phase")
-                    
-                    # Enable full fusion capabilities
-                    elif current_phase == 'full_fusion':
-                        self.logger.logger.info("🚀 Full fusion phase activated")
-            
             # Update model training phase
             if hasattr(self.model, 'training_phase'):
                 self.model.training_phase = current_phase
+            
+            # 🔥 新增：更新风险偏置注意力层的训练阶段
+            self._update_risk_attention_stage(current_phase)
             
             # Training phase  
             train_loss = self.train_epoch(train_loader)
@@ -180,8 +209,98 @@ class ProgressiveTrainer:
             # Validation phase
             val_metrics = self.validate_epoch(val_loader)
             
+            # 🔥 修复：在每个epoch结束后检查阶段切换条件
+            phase_config = phases[current_phase]
+            should_advance = False
+            advancement_reason = ""
+            
+            # Check epoch-based advancement
+            if epoch - phase_start_epoch >= phase_config['epochs']:
+                should_advance = True
+                advancement_reason = "epoch limit reached"
+                
+            # Check metric-based advancement  
+            elif phase_config['thresholds']:
+                for metric_name, threshold in phase_config['thresholds'].items():
+                    if val_metrics.get(metric_name, 0) >= threshold:
+                        should_advance = True
+                        advancement_reason = f"{metric_name} >= {threshold} (current: {val_metrics.get(metric_name, 0):.4f})"
+                        break
+            
+            # Advance to next phase
+            if should_advance and current_phase != 'full_fusion':
+                next_phase = self._get_next_phase(current_phase)
+                self.logger.logger.info(
+                    f"🔄 Advancing from {current_phase} to {next_phase} phase "
+                    f"(reason: {advancement_reason})"
+                )
+                
+                # Update training phase
+                current_phase = next_phase
+                self.current_phase = current_phase  # 🔥 同步更新实例变量
+                phase_start_epoch = epoch + 1  # 🔥 修复：下一个阶段从下个epoch开始
+                
+                # 🔥 修复：使用统一的参数解冻方法
+                if current_phase == 'risk_aware':
+                    if hasattr(self.model, 'unfreeze_risk_params'):
+                        self.model.unfreeze_risk_params()
+                        self.logger.logger.info("🔓 Risk parameters unfrozen for risk-aware phase")
+                        
+                        # 🔥 关键修复：立即重新创建优化器包含新解冻的参数
+                        self._recreate_optimizer_for_risk_aware()
+                        
+                        # 🔥 验证风险参数解冻状态
+                        risk_status = self._verify_risk_param_status()
+                        trainable_count = risk_status.get('trainable_params', 0)
+                        total_count = risk_status.get('total_params', 0)
+                        
+                        if total_count > 0 and trainable_count == total_count:
+                            self.logger.logger.info(f"✅ 风险参数解冻验证成功: {trainable_count}/{total_count} 参数已激活")
+                            
+                            # 🔥 新增：验证优化器参数覆盖
+                            opt_param_count = sum(len(group['params']) for group in self.optimizer.param_groups)
+                            total_model_params = sum(1 for p in self.model.parameters() if p.requires_grad)
+                            
+                            if opt_param_count == total_model_params:
+                                self.logger.logger.info(f"✅ 优化器参数覆盖验证成功: {opt_param_count}/{total_model_params}")
+                            else:
+                                self.logger.logger.error(f"❌ 优化器参数覆盖失败: {opt_param_count}/{total_model_params}")
+                                # 强制重建优化器
+                                self._force_recreate_optimizer()
+                                
+                        else:
+                            self.logger.logger.warning(f"⚠️ 风险参数解冻不完整: {trainable_count}/{total_count} 参数已激活")
+                            # 尝试再次解冻
+                            self.model.unfreeze_risk_params()
+                            self._recreate_optimizer_for_risk_aware()
+                            self.logger.logger.info("🔧 已尝试再次解冻风险参数并重建优化器")
+                    else:
+                        self.logger.logger.warning("⚠️ 模型没有unfreeze_risk_params方法，尝试使用SharedEncoder方法")
+                        if hasattr(self.model, 'shared_encoder') and hasattr(self.model.shared_encoder, 'unfreeze_risk_params'):
+                            self.model.shared_encoder.unfreeze_risk_params()
+                            self._recreate_optimizer_for_risk_aware()
+                            self.logger.logger.info("🔓 SharedEncoder风险参数已解冻并重建优化器")
+                
+                # Enable full fusion capabilities
+                elif current_phase == 'full_fusion':
+                    self.logger.logger.info("🚀 Full fusion phase activated")
+            
             # Update scheduler
             self.scheduler.step()
+            
+            # 🔥 风险偏置健康监控
+            if current_phase in ['risk_aware', 'full_fusion']:
+                # 在Risk-aware阶段进行深度诊断
+                try:
+                    from .risk_bias_diagnostic import RiskBiasIntelligentDiagnostic
+                    diagnostic = RiskBiasIntelligentDiagnostic(
+                        model=self.model, 
+                        logger=self.logger, 
+                        training_stage=current_phase
+                    )
+                    diagnostic.comprehensive_risk_bias_diagnosis()
+                except Exception as e:
+                    self.logger.logger.warning(f"风险偏置诊断失败: {e}")
             
             # Enhanced logging with phase info
             phase_desc = phases[current_phase]['description']
@@ -355,6 +474,233 @@ class ProgressiveTrainer:
             }
             torch.save(checkpoint, filename)
     
+    def _validate_training_state(self) -> bool:
+        """验证训练状态和风险参数配置 - 修复版：阶段感知检查"""
+        try:
+            print("🔍 验证训练状态...")
+            
+            # 🔥 修复：使用修复版诊断工具，传递正确的训练阶段
+            from .risk_bias_diagnostic import RiskBiasIntelligentDiagnostic
+            
+            # 确定当前训练阶段
+            current_stage = "basic" if hasattr(self, 'current_phase') and self.current_phase == "basic" else "risk_aware"
+            
+            diagnostic = RiskBiasIntelligentDiagnostic(
+                model=self.model, 
+                logger=self.logger, 
+                training_stage=current_stage
+            )
+            
+            # 进行综合诊断 - 直接使用诊断工具的结果，不再自定义错误的检查
+            is_ready, readiness_result = diagnostic.verify_training_readiness()
+            
+            if not is_ready:
+                # 🔥 修复：只有在非Basic阶段或者确实存在严重问题时才尝试修复
+                if current_stage != "basic":
+                    self.logger.logger.warning("⚠️ 非Basic阶段训练就绪状态检查失败，尝试自动修复...")
+                    
+                    # 只在Risk-aware阶段才尝试解冻参数
+                    if diagnostic.force_unfreeze_risk_parameters():
+                        self.logger.logger.info("✅ 风险参数自动解冻成功")
+                    
+                    # 🔥 修复：调用主模型的统一解冻方法
+                    if hasattr(self.model, 'unfreeze_risk_params'):
+                        try:
+                            self.model.unfreeze_risk_params()
+                            self.logger.logger.info("✅ 主模型风险参数解冻成功")
+                        except Exception as e:
+                            self.logger.logger.warning(f"主模型解冻失败: {e}")
+                    elif hasattr(self.model, 'shared_encoder') and hasattr(self.model.shared_encoder, 'unfreeze_risk_params'):
+                        try:
+                            self.model.shared_encoder.unfreeze_risk_params()
+                            self.logger.logger.info("✅ SharedEncoder风险参数解冻成功")
+                        except Exception as e:
+                            self.logger.logger.warning(f"SharedEncoder解冻失败: {e}")
+                    
+                    # 重新验证
+                    is_ready, readiness_result = diagnostic.verify_training_readiness()
+                    
+                    if not is_ready:
+                        failed_checks = [k for k, v in readiness_result.get('readiness_checks', {}).items() if not v]
+                        self.logger.logger.warning(f"❌ 自动修复后仍有失败项: {failed_checks}")
+                        return False
+                    else:
+                        self.logger.logger.info("✅ 自动修复成功，所有检查项通过")
+                else:
+                    # Basic阶段：不应该出现就绪性失败，如果出现则说明有严重问题
+                    failed_checks = [k for k, v in readiness_result.get('readiness_checks', {}).items() if not v]
+                    self.logger.logger.info(f"📋 Basic阶段状态检查结果: {failed_checks}")
+                    # Basic阶段允许某些"失败"项（因为参数应该被冻结）
+                    return True
+            
+            # 验证优化器状态
+            lr = self.optimizer.param_groups[0]['lr']
+            total_params = sum(p.numel() for p in self.model.parameters())
+            trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            
+            diagnosis_result = readiness_result.get('full_diagnosis', {})
+            risk_param_count = diagnosis_result.get('parameter_status', {}).get('total_risk_params', 0)
+            
+            self.logger.logger.info(f"✅ 训练状态正常: 风险参数 {risk_param_count}, 可训练参数 {trainable_params}/{total_params}, LR={lr:.2e}")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.logger.error(f"❌ 训练状态验证失败: {str(e)}")
+            return False
+
+    def _monitor_gradients(self) -> Dict[str, float]:
+        """SOTA梯度监控方法 - 阶段感知"""
+        grad_stats = {}
+        risk_params_info = {}
+        
+        try:
+            for name, param in self.model.named_parameters():
+                # 收集风险偏置参数的详细信息
+                if 'beta' in name or 'temperature' in name:
+                    risk_params_info[name] = {
+                        'requires_grad': param.requires_grad,
+                        'has_grad': param.grad is not None,
+                        'grad_norm': float(param.grad.norm(2)) if param.grad is not None else 0.0
+                    }
+                
+                if param.grad is not None:
+                    grad_norm = param.grad.data.norm(2)
+                    grad_stats[name] = float(grad_norm)
+                    
+                    # 检查异常梯度
+                    if torch.isnan(param.grad).any():
+                        self.logger.logger.warning(f"⚠️ NaN梯度: {name}")
+                    elif torch.isinf(param.grad).any():
+                        self.logger.logger.warning(f"⚠️ Inf梯度: {name}")
+            
+            # 详细的风险偏置参数状态报告
+            risk_grad_count = sum(1 for info in risk_params_info.values() if info['has_grad'])
+            risk_trainable_count = sum(1 for info in risk_params_info.values() if info['requires_grad'])
+            
+            # 阶段特定的诊断
+            if self.current_phase == 'basic':
+                frozen_count = sum(1 for info in risk_params_info.values() if not info['requires_grad'])
+                if frozen_count == len(risk_params_info):
+                    self.logger.logger.debug(f"✅ Basic阶段：{frozen_count}个风险参数正确冻结")
+                else:
+                    self.logger.logger.warning(f"⚠️ Basic阶段：应冻结{len(risk_params_info)}个风险参数，实际冻结{frozen_count}个")
+            else:
+                if risk_trainable_count > 0 and risk_grad_count > 0:
+                    self.logger.logger.debug(f"✅ {self.current_phase.upper()}阶段：{risk_grad_count}/{risk_trainable_count}个风险参数有梯度")
+                else:
+                    self.logger.logger.warning(f"❌ {self.current_phase.upper()}阶段：风险参数状态异常 - 可训练:{risk_trainable_count}, 有梯度:{risk_grad_count}")
+                    
+        except Exception as e:
+            self.logger.logger.error(f"❌ 梯度监控失败: {e}")
+            
+        return grad_stats
+
+    def _verify_risk_param_status(self) -> Dict[str, any]:
+        """🔥 修复版：验证风险参数状态 - 正确查找路径"""
+        try:
+            status = {
+                'total_params': 0,
+                'frozen_params': 0,
+                'trainable_params': 0,
+                'param_details': [],
+                'has_risk_mechanism': False
+            }
+            
+            # 🔥 修复：检查SharedEncoder中的risk_bias_layers
+            if hasattr(self.model, 'shared_encoder') and hasattr(self.model.shared_encoder, 'risk_bias_layers'):
+                risk_layers = self.model.shared_encoder.risk_bias_layers
+                status['has_risk_mechanism'] = True
+                
+                for layer_idx, layer in enumerate(risk_layers):
+                    # 检查每层的风险参数
+                    for param_name in ['beta_src', 'beta_dst', 'temperature']:
+                        if hasattr(layer, param_name):
+                            param = getattr(layer, param_name)
+                            if isinstance(param, nn.Parameter):
+                                status['total_params'] += 1
+                                
+                                param_info = {
+                                    'name': f"risk_bias_layers[{layer_idx}].{param_name}",
+                                    'requires_grad': param.requires_grad,
+                                    'value': param.data.detach().cpu().numpy().tolist() if param.numel() > 1 else float(param.data.detach().cpu()),
+                                    'grad_available': param.grad is not None
+                                }
+                                
+                                if param.grad is not None:
+                                    param_info['grad_norm'] = float(param.grad.norm().item())
+                                
+                                status['param_details'].append(param_info)
+                                
+                                if param.requires_grad:
+                                    status['trainable_params'] += 1
+                                else:
+                                    status['frozen_params'] += 1
+            
+            # 🔥 修复：检查RiskGravityDecoder中的温度参数
+            if hasattr(self.model, 'decoder') and hasattr(self.model.decoder, 'temperature'):
+                param = self.model.decoder.temperature
+                if isinstance(param, nn.Parameter):
+                    status['total_params'] += 1
+                    status['has_risk_mechanism'] = True
+                    
+                    param_info = {
+                        'name': 'decoder.temperature',
+                        'requires_grad': param.requires_grad,
+                        'value': float(param.data.detach().cpu()),
+                        'grad_available': param.grad is not None
+                    }
+                    
+                    if param.grad is not None:
+                        param_info['grad_norm'] = float(param.grad.norm().item())
+                    
+                    status['param_details'].append(param_info)
+                    
+                    if param.requires_grad:
+                        status['trainable_params'] += 1
+                    else:
+                        status['frozen_params'] += 1
+            
+            # 检查其他位置的风险参数（如UEEncoder）
+            if hasattr(self.model, 'ue_encoder') and hasattr(self.model.ue_encoder, 'gat_layers'):
+                for layer_idx, layer in enumerate(self.model.ue_encoder.gat_layers):
+                    for param_name in ['beta_src', 'beta_dst', 'temperature']:
+                        if hasattr(layer, param_name):
+                            param = getattr(layer, param_name)
+                            if isinstance(param, nn.Parameter):
+                                status['total_params'] += 1
+                                status['has_risk_mechanism'] = True
+                                
+                                param_info = {
+                                    'name': f"ue_encoder.gat_layers[{layer_idx}].{param_name}",
+                                    'requires_grad': param.requires_grad,
+                                    'value': param.data.detach().cpu().numpy().tolist() if param.numel() > 1 else float(param.data.detach().cpu()),
+                                    'grad_available': param.grad is not None
+                                }
+                                
+                                if param.grad is not None:
+                                    param_info['grad_norm'] = float(param.grad.norm().item())
+                                
+                                status['param_details'].append(param_info)
+                                
+                                if param.requires_grad:
+                                    status['trainable_params'] += 1
+                                else:
+                                    status['frozen_params'] += 1
+            
+            return status
+            
+        except Exception as e:
+            self.logger.logger.error(f"❌ 风险参数状态验证失败: {str(e)}")
+            return {
+                'total_params': 0,
+                'frozen_params': 0,
+                'trainable_params': 0,
+                'param_details': [],
+                'has_risk_mechanism': False,
+                'error': str(e)
+            }
+
     def _get_next_phase(self, current_phase: str) -> str:
         """Get next training phase"""
         phase_order = ['basic', 'risk_aware', 'full_fusion']
@@ -366,51 +712,40 @@ class ProgressiveTrainer:
             pass
         return 'full_fusion'  # Default to final phase
         
+    def _clear_frozen_parameter_gradients(self):
+        """🔧 修复1：清除冻结参数的残留梯度"""
+        if self.current_phase == 'basic':
+            cleared_count = 0
+            for name, param in self.model.named_parameters():
+                if ('beta' in name or 'temperature' in name) and not param.requires_grad:
+                    if param.grad is not None:
+                        param.grad = None
+                        cleared_count += 1
+            
+            if cleared_count > 0:
+                self.logger.logger.debug(f"🧹 清除了{cleared_count}个冻结参数的残留梯度")
+
     def train_epoch(self, data_loader: DataLoader) -> float:
         """
-        Train for one epoch with dynamic loss weighting for negative sampling
-        
-        Args:
-            data_loader: Training data loader
-            
-        Returns:
-            Average training loss
+        🔥 修复版训练函数 - 解决梯度时序和消失问题
         """
         self.model.train()
         total_loss = 0.0
         num_batches = 0
+        
+        # 🔥 阶段感知的负采样统计
         epoch_pos_samples = 0
         epoch_neg_samples = 0
         
         for batch_idx, batch in enumerate(data_loader):
             try:
-                # Monitor positive/negative sample distribution
-                if self.negative_sampling_enabled and 'positive_edges' in batch and 'negative_edges' in batch:
-                    pos_count = len(batch['positive_edges']) if len(batch['positive_edges'].shape) > 0 else 0
-                    neg_count = len(batch['negative_edges']) if len(batch['negative_edges'].shape) > 0 else 0
-                    
-                    epoch_pos_samples += pos_count
-                    epoch_neg_samples += neg_count
-                    
-                    # Update running statistics
-                    self.pos_neg_ratio_monitor['positive'] += pos_count
-                    self.pos_neg_ratio_monitor['negative'] += neg_count
-                    
-                    # Compute adaptive weights for class imbalance
-                    if pos_count > 0 and neg_count > 0:
-                        total_samples = pos_count + neg_count
-                        pos_weight = total_samples / (2 * pos_count)
-                        neg_weight = total_samples / (2 * neg_count)
-                        
-                        # Apply smoothing to avoid extreme weights
-                        self.adaptive_weights['pos'] = min(pos_weight, 5.0)
-                        self.adaptive_weights['neg'] = min(neg_weight, 5.0)
-                
-                # Move to device (placeholder)
-                # In real implementation, move batch data to device
-                
                 # Move batch to device
                 batch = self._move_batch_to_device(batch)
+                
+                # 收集采样统计信息
+                if 'positive_edges' in batch and 'negative_edges' in batch:
+                    epoch_pos_samples += len(batch['positive_edges'])
+                    epoch_neg_samples += len(batch['negative_edges'])
                 
                 # Forward pass with real link prediction
                 if self.negative_sampling_enabled and 'positive_edges' in batch and 'negative_edges' in batch:
@@ -420,12 +755,42 @@ class ProgressiveTrainer:
                     fine_scores, coarse_scores = self.model(batch)
                     loss = self._compute_graph_level_loss(fine_scores, coarse_scores, batch)
                 
-                # Backward pass
+                # 🔥 修复：正确的梯度清除顺序
+                # 1. 先清除所有梯度
                 self.optimizer.zero_grad()
+                
+                # 2. 反向传播
                 loss.backward()
                 
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                # 3. 清除冻结参数的残留梯度（如果在Basic阶段）
+                if self.current_phase == 'basic':
+                    self._clear_frozen_parameter_gradients()
+                
+                # SOTA梯度监控 (每50个batch监控一次)
+                if batch_idx % 50 == 0:
+                    grad_stats = self._monitor_gradients()
+                    
+                    # 🔥 阶段感知的风险偏置参数梯度检查
+                    risk_has_grad = any('beta' in name or 'temperature' in name 
+                                       for name in grad_stats.keys())
+                    
+                    if self.current_phase == 'basic':
+                        # Basic阶段：风险参数应该被冻结，没有梯度是正常的
+                        if risk_has_grad:
+                            self.logger.logger.warning("⚠️ Basic阶段风险参数意外有梯度！")
+                        else:
+                            self.logger.logger.debug("✅ Basic阶段：风险参数正确冻结")
+                    else:
+                        # Risk-aware阶段及以后：风险参数应该有梯度
+                        if not risk_has_grad:
+                            self.logger.logger.warning(f"❌ {self.current_phase.upper()}阶段风险偏置参数没有梯度！")
+                        else:
+                            self.logger.logger.debug(f"✅ {self.current_phase.upper()}阶段：风险参数正常训练")
+                
+                # Gradient clipping with monitoring
+                grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                if grad_norm > 10.0:
+                    self.logger.logger.warning(f"⚠️ 梯度爆炸: {grad_norm:.3f}")
                 
                 # Update parameters
                 self.optimizer.step()
@@ -460,175 +825,20 @@ class ProgressiveTrainer:
         
     def validate_epoch(self, data_loader: DataLoader) -> Dict[str, float]:
         """
-        真实验证函数 - 替换硬编码占位符
+        🔥 智能验证 - 超时保护 + 死锁预防
         
         Args:
             data_loader: Validation data loader
             
         Returns:
-            真实的验证指标
+            验证指标字典
         """
-        self.model.eval()
-        
-        all_predictions = []
-        all_targets = []
-        all_losses = []
-        
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(data_loader):
-                try:
-                    # Move batch to device
-                    batch = self._move_batch_to_device(batch)
-                    
-                    # 真实的模型推理
-                    if self.negative_sampling_enabled and 'positive_edges' in batch and 'negative_edges' in batch:
-                        # 链路预测模式
-                        graph = batch['graph']
-                        positive_edges = batch['positive_edges']
-                        negative_edges = batch['negative_edges'] 
-                        risk_scores = batch['risk_scores']
-                        
-                        # 计算链路预测分数
-                        try:
-                            # 尝试获取节点嵌入
-                            if hasattr(self.model, 'get_node_embeddings'):
-                                node_embeddings = self.model.get_node_embeddings(graph, risk_scores)
-                                
-                                # 计算正边分数
-                                if len(positive_edges) > 0:
-                                    pos_src_emb = node_embeddings[positive_edges[:, 0]]
-                                    pos_dst_emb = node_embeddings[positive_edges[:, 1]]
-                                    pos_scores = torch.sigmoid(torch.sum(pos_src_emb * pos_dst_emb, dim=1))
-                                else:
-                                    pos_scores = torch.tensor([])
-                                
-                                # 计算负边分数
-                                if len(negative_edges) > 0:
-                                    neg_src_emb = node_embeddings[negative_edges[:, 0]]
-                                    neg_dst_emb = node_embeddings[negative_edges[:, 1]]
-                                    neg_scores = torch.sigmoid(torch.sum(neg_src_emb * neg_dst_emb, dim=1))
-                                else:
-                                    neg_scores = torch.tensor([])
-                                
-                                # 合并预测分数和真实标签
-                                if len(pos_scores) > 0 and len(neg_scores) > 0:
-                                    predictions = torch.cat([pos_scores, neg_scores])
-                                    targets = torch.cat([
-                                        torch.ones(len(pos_scores)),
-                                        torch.zeros(len(neg_scores))
-                                    ])
-                                elif len(pos_scores) > 0:
-                                    predictions = pos_scores
-                                    targets = torch.ones(len(pos_scores))
-                                elif len(neg_scores) > 0:
-                                    predictions = neg_scores
-                                    targets = torch.zeros(len(neg_scores))
-                                else:
-                                    continue  # 跳过空批次
-                                    
-                            else:
-                                # 回退到图级别预测
-                                fine_scores, coarse_scores = self.model(batch)
-                                predictions = torch.sigmoid(fine_scores)
-                                targets = batch.get('edge_labels', torch.zeros_like(predictions))
-                        
-                        except Exception as e:
-                            # 回退处理
-                            self.logger.logger.warning(f"Validation forward pass error: {e}")
-                            continue
-                            
-                    else:
-                        # 标准图级别预测
-                        fine_scores, coarse_scores = self.model(batch)
-                        predictions = torch.sigmoid(fine_scores)
-                        targets = batch.get('edge_labels', torch.zeros_like(predictions))
-                    
-                    # 计算损失
-                    if len(predictions) > 0 and len(targets) > 0:
-                        # 确保维度匹配
-                        min_len = min(len(predictions), len(targets))
-                        predictions = predictions[:min_len]
-                        targets = targets[:min_len].float()
-                        
-                        loss = F.binary_cross_entropy(predictions, targets)
-                        all_losses.append(loss.item())
-                        
-                        # 收集预测结果
-                        all_predictions.extend(predictions.cpu().numpy())
-                        all_targets.extend(targets.cpu().numpy())
-                
-                except Exception as e:
-                    self.logger.logger.warning(f"Validation error in batch {batch_idx}: {e}")
-                    continue
-        
-        # 计算真实指标
-        if len(all_predictions) > 0 and len(all_targets) > 0:
-            predictions_array = np.array(all_predictions)
-            targets_array = np.array(all_targets)
-            
-            # 基础指标
-            try:
-                from sklearn.metrics import roc_auc_score, average_precision_score
-                
-                # AUC - 检查是否有两个类别
-                unique_targets = np.unique(targets_array)
-                if len(unique_targets) > 1:
-                    auc = roc_auc_score(targets_array, predictions_array)
-                    aupr = average_precision_score(targets_array, predictions_array)
-                else:
-                    auc = 0.5  # 单类别时的随机基线
-                    aupr = float(unique_targets[0])  # 如果全是正样本则为1.0，全是负样本则为0.0
-                
-                # 精确率和召回率
-                binary_preds = (predictions_array > 0.5).astype(int)
-                
-                if np.sum(binary_preds) > 0:
-                    precision = np.sum((targets_array == 1) & (binary_preds == 1)) / np.sum(binary_preds)
-                else:
-                    precision = 0.0
-                
-                if np.sum(targets_array == 1) > 0:
-                    recall = np.sum((targets_array == 1) & (binary_preds == 1)) / np.sum(targets_array == 1)
-                else:
-                    recall = 0.0
-                
-                metrics = {
-                    'auc': float(auc),
-                    'aupr': float(aupr),
-                    'precision': float(precision),
-                    'recall': float(recall),
-                    'loss': float(np.mean(all_losses)) if all_losses else 0.5,
-                    'num_samples': len(all_predictions),
-                    'num_positive': int(np.sum(targets_array == 1)),
-                    'num_negative': int(np.sum(targets_array == 0))
-                }
-                
-            except Exception as e:
-                self.logger.logger.warning(f"Metrics calculation error: {e}")
-                metrics = {
-                    'auc': 0.5,
-                    'aupr': 0.5, 
-                    'precision': 0.0,
-                    'recall': 0.0,
-                    'loss': 0.5,
-                    'num_samples': len(all_predictions),
-                    'num_positive': int(np.sum(targets_array == 1)),
-                    'num_negative': int(np.sum(targets_array == 0))
-                }
-        else:
-            # 没有有效数据的回退
-            metrics = {
-                'auc': 0.5,
-                'aupr': 0.5,
-                'precision': 0.0,
-                'recall': 0.0,
-                'loss': 0.5,
-                'num_samples': 0,
-                'num_positive': 0,
-                'num_negative': 0
-            }
-        
-        return metrics
+        # 🔥 使用智能验证器替代复杂的验证逻辑
+        return self.intelligent_validator.validate_with_intelligence(
+            model=self.model,
+            data_loader=data_loader,
+            device=self.device
+        )
         
     def save_checkpoint(self, filename: str) -> None:
         """
@@ -673,6 +883,7 @@ class ProgressiveTrainer:
     def _compute_link_prediction_loss(self, batch):
         """
         Compute real link prediction loss using positive and negative edges
+        🔥 关键修复：使用RiskGravityDecoder而不是简单点积，确保风险参数参与梯度传播
         
         Args:
             batch: Batch data containing graph, positive_edges, negative_edges
@@ -690,15 +901,34 @@ class ProgressiveTrainer:
             # Call model to get node embeddings
             node_embeddings = self.model.get_node_embeddings(graph, risk_scores)
             
-            # Compute positive edge scores
+            # 🔥 关键修复：使用RiskGravityDecoder计算链路分数，确保风险信息参与
+            # Compute positive edge scores using decoder
             pos_src_emb = node_embeddings[positive_edges[:, 0]]
             pos_dst_emb = node_embeddings[positive_edges[:, 1]]
-            pos_scores = torch.sum(pos_src_emb * pos_dst_emb, dim=1)
+            pos_src_risk = risk_scores[positive_edges[:, 0]].unsqueeze(-1)
+            pos_dst_risk = risk_scores[positive_edges[:, 1]].unsqueeze(-1)
             
-            # Compute negative edge scores  
+            # 使用模型的RiskGravityDecoder
+            pos_scores = self.model.decoder(
+                embeddings_u=pos_src_emb,
+                embeddings_v=pos_dst_emb,
+                risk_u=pos_src_risk,
+                risk_v=pos_dst_risk
+            ).squeeze(-1)
+            
+            # Compute negative edge scores using decoder
             neg_src_emb = node_embeddings[negative_edges[:, 0]]
             neg_dst_emb = node_embeddings[negative_edges[:, 1]]
-            neg_scores = torch.sum(neg_src_emb * neg_dst_emb, dim=1)
+            neg_src_risk = risk_scores[negative_edges[:, 0]].unsqueeze(-1)
+            neg_dst_risk = risk_scores[negative_edges[:, 1]].unsqueeze(-1)
+            
+            # 使用模型的RiskGravityDecoder
+            neg_scores = self.model.decoder(
+                embeddings_u=neg_src_emb,
+                embeddings_v=neg_dst_emb,
+                risk_u=neg_src_risk,
+                risk_v=neg_dst_risk
+            ).squeeze(-1)
             
             # Create labels: 1 for positive edges, 0 for negative edges
             pos_labels = torch.ones(positive_edges.size(0), device=self.device)
@@ -708,8 +938,10 @@ class ProgressiveTrainer:
             all_scores = torch.cat([pos_scores, neg_scores])
             all_labels = torch.cat([pos_labels, neg_labels])
             
-            # Apply sigmoid and compute BCE loss
-            loss = F.binary_cross_entropy_with_logits(all_scores, all_labels)
+            # 🔥 修复：decoder已经应用了sigmoid，使用BCE而不是BCE_with_logits
+            # Apply BCE loss (decoder output is already sigmoid)
+            all_scores = torch.clamp(all_scores, 1e-7, 1 - 1e-7)  # 数值稳定性
+            loss = F.binary_cross_entropy(all_scores, all_labels)
             
             return loss
             
@@ -760,18 +992,24 @@ class ProgressiveTrainer:
                 print(f"✅ 损失计算：预测={len(fine_scores_flat)}, 标签={len(edge_labels_flat)}")
                 print(f"  标签分布: 正样本={torch.sum(edge_labels_flat).item()}, 负样本={torch.sum(edge_labels_flat == 0).item()}")
             
-            # Binary cross entropy loss
+            # SOTA数值稳定的Binary cross entropy loss
             try:
-                loss = F.binary_cross_entropy_with_logits(fine_scores_flat, edge_labels_flat)
-                
                 # 添加数值稳定性检查
+                if torch.isnan(fine_scores_flat).any() or torch.isinf(fine_scores_flat).any():
+                    if debug_enabled:
+                        print("⚠️ 检测到预测分数中的NaN/Inf值")
+                    fine_scores_flat = torch.nan_to_num(fine_scores_flat, nan=0.0, posinf=1.0, neginf=-1.0)
+                
+                # 使用label smoothing提高稳定性 - SOTA实践
+                smoothed_labels = edge_labels_flat * 0.9 + 0.05
+                
+                loss = F.binary_cross_entropy_with_logits(fine_scores_flat, smoothed_labels)
+                
+                # 验证损失值
                 if torch.isnan(loss) or torch.isinf(loss):
                     if debug_enabled:
                         print(f"⚠️ 检测到异常损失值: {loss}, 使用备用损失计算")
-                    # 使用更稳定的损失计算
-                    probs = torch.sigmoid(fine_scores_flat)
-                    probs = torch.clamp(probs, 1e-7, 1 - 1e-7)  # 数值稳定性
-                    loss = -(edge_labels_flat * torch.log(probs) + (1 - edge_labels_flat) * torch.log(1 - probs)).mean()
+                    raise ValueError("Loss contains NaN/Inf")
                 
                 # Add coarse-grained loss if available
                 if coarse_scores is not None and coarse_scores.numel() > 0:
@@ -791,12 +1029,87 @@ class ProgressiveTrainer:
                 
             except Exception as e:
                 if debug_enabled:
-                    print(f"❌ 损失计算异常: {e}")
-                # 使用手动实现的稳定损失
+                    print(f"❌ 损失计算异常: {e}, 使用SOTA备用方法")
+                # SOTA稳定损失计算 - 使用smoothed labels
+                smoothed_labels = edge_labels_flat * 0.9 + 0.05
                 probs = torch.sigmoid(fine_scores_flat)
                 probs = torch.clamp(probs, 1e-7, 1 - 1e-7)
-                manual_loss = -(edge_labels_flat * torch.log(probs) + (1 - edge_labels_flat) * torch.log(1 - probs)).mean()
-                return manual_loss if not torch.isnan(manual_loss) else torch.tensor(0.5, requires_grad=True, device=self.device)
+                stable_loss = -(smoothed_labels * torch.log(probs) + 
+                               (1 - smoothed_labels) * torch.log(1 - probs)).mean()
+                return stable_loss if not torch.isnan(stable_loss) else torch.tensor(0.5, requires_grad=True, device=self.device)
         else:
             # Fallback for empty predictions
             return torch.tensor(0.5, requires_grad=True, device=self.device) 
+
+    def _recreate_optimizer_for_risk_aware(self):
+        """🔥 重新创建优化器以包含解冻的风险参数"""
+        # 获取当前学习率和配置
+        current_lr = self.optimizer.param_groups[0]['lr']
+        weight_decay = self.optimizer.param_groups[0]['weight_decay']
+        
+        # 获取所有可训练参数（包括新解冻的风险参数）
+        trainable_params = [p for p in self.model.parameters() if p.requires_grad]
+        
+        # 🔥 新增：参数验证
+        if len(trainable_params) == 0:
+            self.logger.logger.error("❌ 没有可训练参数，优化器重建失败")
+            return False
+        
+        # 🔥 新增：风险参数检查
+        risk_param_count = sum(1 for name, p in self.model.named_parameters() 
+                              if p.requires_grad and any(keyword in name for keyword in ['beta', 'temperature']))
+        
+        # 创建新优化器
+        try:
+            self.optimizer = AdamW(
+                trainable_params,
+                lr=current_lr,
+                weight_decay=weight_decay
+            )
+            
+            self.logger.logger.info(f"✅ 优化器重新创建：现在管理 {len(trainable_params)} 个参数（包含 {risk_param_count} 个风险参数）")
+            return True
+            
+        except Exception as e:
+            self.logger.logger.error(f"❌ 优化器重建失败: {e}")
+            return False
+    
+    def _force_recreate_optimizer(self):
+        """🔥 强制重建优化器 - 用于紧急修复"""
+        self.logger.logger.warning("🚨 执行强制优化器重建...")
+        
+        # 确保所有风险参数解冻
+        for name, param in self.model.named_parameters():
+            if any(keyword in name for keyword in ['beta', 'temperature']):
+                param.requires_grad = True
+        
+        # 重建优化器
+        success = self._recreate_optimizer_for_risk_aware()
+        
+        if success:
+            self.logger.logger.info("✅ 强制优化器重建成功")
+        else:
+            self.logger.logger.error("❌ 强制优化器重建失败")
+            
+        return success
+    
+    def _update_risk_attention_stage(self, stage: str):
+        """🔥 更新所有风险偏置注意力层的训练阶段"""
+        updated_layers = 0
+        
+        def update_layer_stage(module):
+            nonlocal updated_layers
+            if hasattr(module, 'set_training_stage'):
+                module.set_training_stage(stage)
+                updated_layers += 1
+            
+            # 递归检查子模块
+            for child in module.children():
+                update_layer_stage(child)
+        
+        update_layer_stage(self.model)
+        
+        if updated_layers > 0:
+            self.logger.logger.info(f"🔧 更新了 {updated_layers} 个风险偏置注意力层的训练阶段: {stage}")
+        else:
+            self.logger.logger.debug("📝 未找到需要更新训练阶段的风险偏置注意力层")

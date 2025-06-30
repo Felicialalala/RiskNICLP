@@ -92,6 +92,42 @@ class RiskNICLPModel(nn.Module):
         print(f"  节点类型投影: {node_feature_dims} → {feature_dim}")
         print(f"  隐藏维度: {hidden_dim}, 风险嵌入: {risk_embed_dim}")
         
+    def freeze_risk_params(self):
+        """统一冻结所有风险相关参数"""
+        print("🔒 RiskNICLP模型：开始冻结所有风险参数")
+        frozen_count = 0
+        
+        # 1. 冻结SharedEncoder中的风险参数
+        if hasattr(self, 'shared_encoder') and hasattr(self.shared_encoder, 'freeze_risk_params'):
+            self.shared_encoder.freeze_risk_params()
+            frozen_count += 6  # 2层 × 3参数
+        
+        # 2. 冻结Decoder中的温度参数
+        if hasattr(self, 'decoder') and hasattr(self.decoder, 'temperature'):
+            self.decoder.temperature.requires_grad_(False)
+            frozen_count += 1
+            print(f"    ✅ 冻结 decoder.temperature: {self.decoder.temperature.shape} -> requires_grad={self.decoder.temperature.requires_grad}")
+        
+        print(f"🔒 模型级冻结完成，总共冻结了 {frozen_count} 个风险参数")
+        
+    def unfreeze_risk_params(self):
+        """统一解冻所有风险相关参数"""
+        print("🔓 RiskNICLP模型：开始解冻所有风险参数")
+        unfrozen_count = 0
+        
+        # 1. 解冻SharedEncoder中的风险参数
+        if hasattr(self, 'shared_encoder') and hasattr(self.shared_encoder, 'unfreeze_risk_params'):
+            self.shared_encoder.unfreeze_risk_params()
+            unfrozen_count += 6  # 2层 × 3参数
+        
+        # 2. 解冻Decoder中的温度参数
+        if hasattr(self, 'decoder') and hasattr(self.decoder, 'temperature'):
+            self.decoder.temperature.requires_grad_(True)
+            unfrozen_count += 1
+            print(f"    ✅ 解冻 decoder.temperature: {self.decoder.temperature.shape} -> requires_grad={self.decoder.temperature.requires_grad}")
+        
+        print(f"🔓 模型级解冻完成，总共解冻了 {unfrozen_count} 个风险参数")
+        
     def forward(self, batch: Dict[str, Any]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass with heterogeneous node processing
@@ -467,8 +503,9 @@ class RiskNICLPModel(nn.Module):
             projected_features, risk_embeddings, graph
         )
         
-        # 4. 通过图编码器获取最终嵌入
-        final_embeddings = self.shared_encoder(graph, integrated_features)
+        # 4. 通过图编码器获取最终嵌入（在这里要传递风险函数）
+        risk_type_features = self._prepare_hetero_risk(graph, risk_scores)
+        final_embeddings = self.shared_encoder(graph, integrated_features, risk_type_features)
         
         # 5. 拼接所有节点类型的嵌入为统一张量
         all_embeddings = []

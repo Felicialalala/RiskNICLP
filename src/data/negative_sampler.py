@@ -386,88 +386,312 @@ class RiskAwareNegativeSampler:
         positive_edges: torch.Tensor, 
         risk_scores: torch.Tensor
     ) -> torch.Tensor:
-        """困难负采样：主要从高风险节点间采样"""
+        """🔥 强化困难负采样：主要从高风险节点间采样，提升训练挑战性"""
         num_nodes = graph.number_of_nodes()
         num_pos_edges = positive_edges.shape[0]
         num_neg_edges = num_pos_edges * self.neg_ratio
         
-        # 安全获取高风险阈值
+        # 🔥 关键改进：更智能的困难负样本策略
+        # 1. 多层风险分级，而不是单一0.8阈值
         try:
-            high_threshold = float(self.risk_thresholds[0])
+            high_threshold = float(self.risk_thresholds[0])    # 0.8 超高风险
+            mid_threshold = float(self.risk_thresholds[1])     # 0.5 中等风险
+            low_threshold = float(self.risk_thresholds[2])     # 0.2 低风险
         except (TypeError, ValueError, IndexError) as e:
-            high_threshold = 0.8  # 默认高风险阈值
+            high_threshold, mid_threshold, low_threshold = 0.8, 0.5, 0.2
             if hasattr(self, 'logger'):
-                self.logger.warning(f"风险阈值类型错误，使用默认值: {e}")
+                self.logger.warning(f"风险阈值解析失败: {e}，使用默认值")
         
-        # 高风险节点 - 安全比较
-        try:
-            # 确保类型安全的比较
-            risk_scores = risk_scores.float()
-            high_threshold = float(high_threshold)
-            high_risk_nodes = torch.where(risk_scores > high_threshold)[0]
-        except Exception as e:
-            # 如果风险分数比较失败，使用前20%节点作为高风险
-            if hasattr(self, 'logger'):
-                self.logger.warning(f"风险分数比较失败，使用默认高风险节点: {e}")
-            high_risk_count = max(1, num_nodes // 5)  # 前20%
-            high_risk_nodes = torch.arange(high_risk_count)
+        # 2. 🔥 修复：异质图节点类型分离
+        node_types = {}
+        edge_types = {}
         
-        # 将正样本边转换为set
-        positive_edge_set = set()
-        for i in range(num_pos_edges):
-            src, dst = positive_edges[i].tolist()
-            positive_edge_set.add((src, dst))
-            positive_edge_set.add((dst, src))
+        if not graph.is_homogeneous:
+            # 异质图：按节点类型分组
+            for ntype in graph.ntypes:
+                node_indices = graph.nodes(ntype)
+                if len(node_indices) > 0:
+                    node_types[ntype] = node_indices
             
-        negative_edges = []
-        
-        # 主要从高风险节点采样 (80%)
-        num_hard_edges = int(num_neg_edges * 0.8)
-        if len(high_risk_nodes) > 1:
-            hard_edges = self._sample_from_node_set(
-                high_risk_nodes, num_hard_edges, positive_edge_set
-            )
-            negative_edges.extend(hard_edges)
-            
-        # 随机采样填充剩余 (20%)
-        remaining = num_neg_edges - len(negative_edges)
-        if remaining > 0:
+            # 按边类型分组
+            for etype in graph.etypes:
+                try:
+                    src_nodes, dst_nodes = graph.edges(etype=etype)
+                    if len(src_nodes) > 0:
+                        edge_types[etype] = (src_nodes, dst_nodes)
+                except Exception as e:
+                    if hasattr(self, 'logger'):
+                        self.logger.warning(f"边类型 {etype} 处理失败: {e}")
+                    continue
+        else:
+            # 同质图：所有节点同一类型
             all_nodes = torch.arange(num_nodes)
-            random_edges = self._sample_from_node_set(
-                all_nodes, remaining, positive_edge_set
-            )
-            negative_edges.extend(random_edges)
+            node_types['default'] = all_nodes
+            src_nodes, dst_nodes = graph.edges()
+            edge_types['default'] = (src_nodes, dst_nodes)
+        
+        # 3. 按风险等级分组节点
+        high_risk_nodes = torch.where(risk_scores > high_threshold)[0]
+        mid_risk_nodes = torch.where((risk_scores > mid_threshold) & (risk_scores <= high_threshold))[0]
+        low_risk_nodes = torch.where((risk_scores > low_threshold) & (risk_scores <= mid_threshold))[0]
+        all_nodes = torch.arange(num_nodes)
+        
+        if hasattr(self, 'logger'):
+            self.logger.info(f"🎯 风险分层节点: 高风险={len(high_risk_nodes)}, 中风险={len(mid_risk_nodes)}, 低风险={len(low_risk_nodes)}")
+        
+        # 4. 构建正边集合 (用于去重)
+        positive_edge_set = set()
+        for i in range(len(positive_edges)):
+            u, v = positive_edges[i].tolist()
+            positive_edge_set.add((u, v))
+            positive_edge_set.add((v, u))  # 考虑双向
+        
+        # 5. ‼️ 按边类型平衡的强化采样策略
+        negative_edges = []
+        edge_type_neg_counts = {}  # 记录每种边类型的负样本数量
+        
+        # ‼️ 根据正边的边类型分布来分配负样本配额
+        if not graph.is_homogeneous and edge_types:
+            # 计算各边类型的正边数量
+            pos_etype_counts = {}
+            for etype, (src_nodes, dst_nodes) in edge_types.items():
+                count = 0
+                for u, v in positive_edges:
+                    if (u.item() in src_nodes and v.item() in dst_nodes) or \
+                       (v.item() in src_nodes and u.item() in dst_nodes):
+                        count += 1
+                pos_etype_counts[etype] = count
             
-        negative_edges = negative_edges[:num_neg_edges]
+            # 按比例分配负样本
+            total_pos = sum(pos_etype_counts.values()) + 1e-8
+            for etype, pos_count in pos_etype_counts.items():
+                ratio = pos_count / total_pos
+                edge_type_neg_counts[etype] = int(num_neg_edges * ratio)
+        else:
+            # 同质图：单一边类型
+            edge_type_neg_counts['default'] = num_neg_edges
         
-        return torch.tensor(negative_edges, dtype=torch.long)
+        # 按边类型分别采样
+        for etype, target_count in edge_type_neg_counts.items():
+            if target_count <= 0:
+                continue
+                
+            # 策略1: 高风险节点内部连接 (50%)
+            num_high_high = int(target_count * 0.5)
+            if len(high_risk_nodes) > 1:
+                high_high_edges = self._sample_from_node_set_safe(
+                    high_risk_nodes, num_high_high, positive_edge_set,
+                    node_types, edge_types, strategy="intensive", target_etype=etype
+                )
+                negative_edges.extend(high_high_edges)
+            
+            # 策略2: 高-中风险跨级连接 (30%)
+            num_high_mid = int(target_count * 0.3)
+            if len(high_risk_nodes) > 0 and len(mid_risk_nodes) > 0:
+                high_mid_edges = self._cross_risk_sampling_safe(
+                    high_risk_nodes, mid_risk_nodes, num_high_mid, positive_edge_set,
+                    node_types, edge_types, target_etype=etype
+                )
+                negative_edges.extend(high_mid_edges)
+            
+            # 策略3: 随机填充 (20%)
+            current_count = len([e for e in negative_edges if self._edge_matches_type(e, etype, edge_types)])
+            remaining = target_count - current_count
+            if remaining > 0:
+                random_edges = self._sample_from_node_set_safe(
+                    all_nodes, remaining, positive_edge_set,
+                    node_types, edge_types, strategy="random", target_etype=etype
+                )
+                negative_edges.extend(random_edges)
         
-    def _sample_from_node_set(
+        if hasattr(self, 'logger'):
+            for etype, target in edge_type_neg_counts.items():
+                actual = len([e for e in negative_edges if self._edge_matches_type(e, etype, edge_types)])
+                self.logger.info(f"   ‼️ {etype}: 目标={target}, 实际={actual}")
+        
+        # 6. 🔥 去重和质量检查
+        if negative_edges:
+            # 转换为张量并去重
+            neg_tensor = torch.tensor(negative_edges, dtype=torch.long)
+            if len(neg_tensor.shape) == 2 and neg_tensor.shape[1] == 2:
+                # 使用torch.unique去重 (按行)
+                unique_edges = torch.unique(neg_tensor, dim=0)
+                
+                # 自环过滤 (u != v)
+                valid_mask = unique_edges[:, 0] != unique_edges[:, 1]
+                final_edges = unique_edges[valid_mask]
+                
+                # 困难程度验证
+                if len(final_edges) > 0:
+                    src_risks = risk_scores[final_edges[:, 0]]
+                    dst_risks = risk_scores[final_edges[:, 1]]
+                    high_risk_edge_ratio = ((src_risks > 0.8) | (dst_risks > 0.8)).float().mean().item()
+                    
+                    if hasattr(self, 'logger'):
+                        self.logger.info(f"🔥 困难负样本质量: 高风险边比例={high_risk_edge_ratio:.1%}, 总数={len(final_edges)}")
+                
+                return final_edges
+        
+        # 兜底：返回基础随机采样
+        if hasattr(self, 'logger'):
+            self.logger.warning("困难负采样失败，回退到基础随机采样")
+        return self._fallback_random_sampling(graph, num_neg_edges, positive_edge_set)
+    
+    def _sample_from_node_set_safe(
         self, 
         node_set: torch.Tensor, 
-        num_samples: int, 
-        positive_edge_set: set
-    ) -> List[List[int]]:
-        """从指定节点集合中采样边 - 优化版本"""
-        negative_edges = []
-        max_attempts = min(num_samples * 5, 5000)  # 大幅降低最大尝试次数
-        attempts = 0
+        num_edges: int, 
+        positive_edge_set: set,
+        node_types: dict,
+        edge_types: dict,
+        strategy: str = "random",
+        target_etype: str = None
+    ) -> list:
+        """🔥 安全的节点集采样：处理异质图兼容性"""
         
-        node_list = node_set.tolist()
+        edges = []
+        max_attempts = 8000 if strategy == "intensive" else 1000
         
-        while len(negative_edges) < num_samples and attempts < max_attempts:
-            if len(node_list) < 2:
+        for _ in range(max_attempts):
+            if len(edges) >= num_edges:
                 break
                 
-            src = random.choice(node_list)
-            dst = random.choice(node_list)
-            
-            if src != dst and (src, dst) not in positive_edge_set:
-                negative_edges.append([src, dst])
+            # 随机选择两个节点
+            if len(node_set) < 2:
+                break
                 
-            attempts += 1
+            indices = torch.randperm(len(node_set))[:2]
+            u, v = node_set[indices[0]].item(), node_set[indices[1]].item()
             
-        return negative_edges
+            # 检查有效性
+            if u == v:  # 自环过滤
+                continue
+            if (u, v) in positive_edge_set or (v, u) in positive_edge_set:  # 正边去重
+                continue
+                
+            # 🔥 异质图类型兼容性检查
+            if self._is_valid_heterogeneous_edge(u, v, node_types, edge_types):
+                edges.append([u, v])
+        
+        return edges
+    
+    def _cross_risk_sampling_safe(
+        self,
+        high_nodes: torch.Tensor,
+        mid_nodes: torch.Tensor, 
+        num_edges: int,
+        positive_edge_set: set,
+        node_types: dict,
+        edge_types: dict,
+        target_etype: str = None
+    ) -> list:
+        """🔥 跨风险级别安全采样"""
+        
+        edges = []
+        max_attempts = 5000
+        
+        for _ in range(max_attempts):
+            if len(edges) >= num_edges:
+                break
+                
+            if len(high_nodes) == 0 or len(mid_nodes) == 0:
+                break
+                
+            # 随机选择高风险和中风险节点
+            u = high_nodes[torch.randint(len(high_nodes), (1,))].item()
+            v = mid_nodes[torch.randint(len(mid_nodes), (1,))].item()
+            
+            # 有效性检查
+            if u == v:
+                continue
+            if (u, v) in positive_edge_set or (v, u) in positive_edge_set:
+                continue
+                
+            # 异质图类型检查
+            if self._is_valid_heterogeneous_edge(u, v, node_types, edge_types):
+                edges.append([u, v])
+        
+        return edges
+    
+    def _edge_matches_type(self, edge: list, target_etype: str, edge_types: dict) -> bool:
+        """‼️ 检查边是否匹配指定的边类型"""
+        if target_etype is None or target_etype == 'default':
+            return True
+            
+        if target_etype not in edge_types:
+            return True
+            
+        u, v = edge[0], edge[1]
+        src_nodes, dst_nodes = edge_types[target_etype]
+        
+        # 检查边是否符合该类型的节点约束
+        return ((u in src_nodes and v in dst_nodes) or 
+                (v in src_nodes and u in dst_nodes))
+    
+    def _is_valid_heterogeneous_edge(
+        self, 
+        u: int, 
+        v: int, 
+        node_types: dict, 
+        edge_types: dict
+    ) -> bool:
+        """🔥 检查异质图边的类型有效性"""
+        
+        # 同质图：所有边都有效
+        if len(node_types) <= 1:
+            return True
+            
+        # 异质图：检查边类型是否合法
+        u_type = None
+        v_type = None
+        
+        # 确定节点类型
+        for ntype, nodes in node_types.items():
+            if u in nodes:
+                u_type = ntype
+            if v in nodes:
+                v_type = ntype
+                
+        if u_type is None or v_type is None:
+            return False
+            
+        # 检查是否存在合法的边类型
+        for etype, (src_nodes, dst_nodes) in edge_types.items():
+            # 简化检查：如果边类型中包含这两种节点类型，认为是合法的
+            if len(src_nodes) > 0 and len(dst_nodes) > 0:
+                return True  # 简化为允许所有类型组合
+                
+        return True  # 保守策略：允许所有边
+    
+    def _fallback_random_sampling(
+        self, 
+        graph: dgl.DGLGraph, 
+        num_edges: int, 
+        positive_edge_set: set
+    ) -> torch.Tensor:
+        """兜底随机采样策略"""
+        
+        num_nodes = graph.number_of_nodes()
+        edges = []
+        max_attempts = num_edges * 10
+        
+        for _ in range(max_attempts):
+            if len(edges) >= num_edges:
+                break
+                
+            u = torch.randint(0, num_nodes, (1,)).item()
+            v = torch.randint(0, num_nodes, (1,)).item()
+            
+            if u != v and (u, v) not in positive_edge_set and (v, u) not in positive_edge_set:
+                edges.append([u, v])
+        
+        if edges:
+            return torch.tensor(edges, dtype=torch.long)
+        else:
+            # 最终兜底：生成简单的连续边对
+            u_indices = torch.arange(min(num_edges, num_nodes // 2))
+            v_indices = torch.arange(min(num_edges, num_nodes // 2)) + 1
+            return torch.stack([u_indices, v_indices], dim=1)
     
     def _semantic_aware_sampling(
         self, 

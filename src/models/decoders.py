@@ -34,7 +34,7 @@ class RiskGravityDecoder(nn.Module):
         input_dim: int,
         hidden_dim: int = 64,
         epsilon: float = 1e-3,
-        temperature: float = 0.1,
+        temperature: float = 1.0,
         learnable_epsilon: bool = True,
         use_risk_weighting: bool = True
     ):
@@ -42,7 +42,7 @@ class RiskGravityDecoder(nn.Module):
         
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.temperature = temperature
+        self.temperature = nn.Parameter(torch.tensor(float(temperature)))
         self.use_risk_weighting = use_risk_weighting
         
         # Mass computation networks
@@ -84,6 +84,10 @@ class RiskGravityDecoder(nn.Module):
         
         # Directional bias
         self.directional_bias = nn.Parameter(torch.zeros(1))
+        
+        # 🔥 温度参数约束：防止过小导致饱和
+        self.register_buffer('temp_min', torch.tensor(0.5))
+        self.register_buffer('temp_max', torch.tensor(2.0))
         
         self.logger = get_logger()
         
@@ -175,8 +179,9 @@ class RiskGravityDecoder(nn.Module):
         
         force = numerator / denominator
         
-        # Apply temperature scaling and sigmoid
-        scores = torch.sigmoid(force / self.temperature)
+        # 🔥 关键修复：约束温度参数，防止过小导致饱和
+        temperature_clamped = torch.clamp(self.temperature, self.temp_min, self.temp_max)
+        scores = torch.sigmoid(force / temperature_clamped)
         
         if return_components:
             components = {

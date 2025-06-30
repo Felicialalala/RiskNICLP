@@ -11,12 +11,13 @@ from pathlib import Path
 import dgl
 import numpy as np
 from .negative_sampler import BaselineNegativeSampler, RiskAwareNegativeSampler, create_negative_sampler
+from .edge_label_cache import EdgeLabelCache
 
 
 class RiskNICLPDataset(Dataset):
     """RiskNICLP-5G Dataset class"""
     
-    def __init__(self, graph_dir: str, metadata_dir: str, feature_processor, risk_vectorizer, cache_manager=None, negative_sampler_config=None):
+    def __init__(self, graph_dir: str, metadata_dir: str, feature_processor, risk_vectorizer, cache_manager=None, negative_sampler_config=None, enable_edge_label_cache: bool = True):
         """
         Initialize dataset
         
@@ -27,6 +28,7 @@ class RiskNICLPDataset(Dataset):
             risk_vectorizer: Risk vectorizer instance
             cache_manager: Cache manager (optional)
             negative_sampler_config: Configuration for negative sampling
+            enable_edge_label_cache: Enable edge label caching for faster training
         """
         self.graph_dir = graph_dir
         self.metadata_dir = metadata_dir
@@ -40,6 +42,24 @@ class RiskNICLPDataset(Dataset):
             negative_sampler_config = {'type': 'baseline', 'neg_ratio': 3}
         self.negative_sampler = create_negative_sampler(negative_sampler_config)
         self.negative_sampler_config = negative_sampler_config
+        
+        # 🚀 Initialize edge label cache system
+        self.enable_edge_label_cache = enable_edge_label_cache
+        if enable_edge_label_cache:
+            cache_dir = Path(graph_dir).parent / "edge_label_cache"
+            self.edge_label_cache = EdgeLabelCache(
+                cache_dir=str(cache_dir),
+                semantic_config={
+                    'triggers': {'pos_ratio': 0.8, 'desc': 'Flow->Alert高风险传播'},
+                    'initiates': {'pos_ratio': 0.4, 'desc': 'UE->Flow中风险发起'},
+                    'temporal_adj': {'pos_ratio': 0.15, 'desc': 'Flow->Flow时序关联'},
+                    'default': {'pos_ratio': 0.1, 'desc': '其他边类型'}
+                }
+            )
+            print(f"🚀 边标签缓存已启用: {cache_dir}")
+        else:
+            self.edge_label_cache = None
+            print("⚠️ 边标签缓存已禁用")
         
         # Initialize data storage
         self.graph_files = None
@@ -332,123 +352,33 @@ class RiskNICLPDataset(Dataset):
                     edge_labels = torch.cat(all_edge_labels, dim=0)
                     print(f"🔍 合并异质图边标签: {edge_labels.shape}")
                 else:
-                    # 🔧 权威边标签生成逻辑 - 基于Risk-PPR确保长度匹配
-                    num_edges = graph.number_of_edges()
-                    if num_edges > 0:
-                        # 🛡️ 严格确保边标签长度=实际边数
-                        all_src_nodes = []
-                        all_dst_nodes = []
+                    # 🚀 使用边标签缓存系统（优化版）
+                    if self.enable_edge_label_cache and self.edge_label_cache is not None:
+                        # 使用缓存系统生成边标签
+                        edge_labels = self.edge_label_cache.get_or_generate_labels(
+                            graph=graph,
+                            risk_scores=risk_scores,
+                            graph_file=str(graph_file)
+                        )
                         
-                        if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
-                            # 异质图：遍历所有边类型
-                            for etype in graph.etypes:
-                                try:
-                                    src, dst = graph.edges(etype=etype)
-                                    all_src_nodes.append(src)
-                                    all_dst_nodes.append(dst)
-                                except Exception as e:
-                                    print(f"⚠️ 处理边类型 {etype} 时出错: {e}")
-                                    continue
-                            
-                            if all_src_nodes and all_dst_nodes:
-                                src_nodes = torch.cat(all_src_nodes)
-                                dst_nodes = torch.cat(all_dst_nodes)
-                            else:
-                                # 空图：创建长度为0的边标签
-                                edge_labels = torch.empty(0, dtype=torch.float32)
-                                src_nodes = None
-                                dst_nodes = None
-                        else:
-                            # 同质图：直接获取边
-                            try:
-                                src_nodes, dst_nodes = graph.edges()
-                            except Exception as e:
-                                print(f"⚠️ 同质图边获取失败: {e}")
-                                edge_labels = torch.empty(0, dtype=torch.float32)
-                                src_nodes = None
-                                dst_nodes = None
-                        
-                        # 基于Risk-PPR生成权威边标签
-                        if src_nodes is not None and dst_nodes is not None and len(risk_scores) > max(src_nodes.max(), dst_nodes.max()):
-                            print(f"🔍 权威边标签生成: 文件={graph_file}, 边数={len(src_nodes)}, 风险分数数={len(risk_scores)}")
-                            
-                            src_risks = risk_scores[src_nodes]
-                            dst_risks = risk_scores[dst_nodes]
-                            edge_risk_scores = (src_risks + dst_risks) / 2.0
-                            
-                            # 🔧 修复: 基于边类型的语义正样本定义，而非文件名
-                            # 异质图的语义正样本策略
-                            if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
-                                # 异质图：基于边类型语义定义正样本
-                                edge_labels = torch.zeros(num_edges, dtype=torch.float32)
-                                edge_offset = 0
-                                
-                                for etype in graph.etypes:
-                                    src, dst = graph.edges(etype=etype)
-                                    num_etype_edges = len(src)
-                                    
-                                    if num_etype_edges > 0:
-                                        # 基于边类型的正样本比例
-                                        if etype == 'triggers':
-                                            # Flow -> Alert: 高风险传播，80%正样本
-                                            pos_ratio = 0.8
-                                        elif etype == 'initiates':
-                                            # UE -> Flow: 中风险发起，40%正样本
-                                            pos_ratio = 0.4
-                                        elif etype == 'temporal_adj':
-                                            # Flow -> Flow: 时序关联，15%正样本
-                                            pos_ratio = 0.15
-                                        else:
-                                            # 其他边类型：10%正样本
-                                            pos_ratio = 0.1
-                                        
-                                        # 基于风险分数优选正样本
-                                        if len(src) > 0 and edge_offset + len(src) <= len(edge_risk_scores):
-                                            etype_edge_risks = edge_risk_scores[edge_offset:edge_offset + num_etype_edges]
-                                            num_positive = max(1, int(num_etype_edges * pos_ratio))
-                                            
-                                            # 选择风险最高的边作为正样本
-                                            top_indices = torch.topk(etype_edge_risks, min(num_positive, len(etype_edge_risks))).indices
-                                            edge_labels[edge_offset + top_indices] = 1.0
-                                        
-                                        edge_offset += num_etype_edges
-                                
-                                print(f"✅ 基于边类型语义定义: 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)} ({edge_labels.sum().item()/len(edge_labels)*100:.1f}%)")
-                            else:
-                                # 同质图：基于风险分数分层
-                                risk_threshold = torch.quantile(edge_risk_scores, 0.7)  # 降低到70%分位数
-                                edge_labels = (edge_risk_scores > risk_threshold).float()
-                                
-                                # 确保至少20%正样本
-                                min_positive = max(1, int(len(edge_labels) * 0.2))
-                                if edge_labels.sum() < min_positive:
-                                    top_indices = torch.topk(edge_risk_scores, min_positive).indices
-                                    edge_labels[top_indices] = 1.0
-                                
-                                print(f"✅ 同质图风险分层: 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)} ({edge_labels.sum().item()/len(edge_labels)*100:.1f}%)")
-                                
-                            # 🛡️ 严格验证：确保标签长度=边数
-                            assert len(edge_labels) == num_edges, f"❌ 边标签长度{len(edge_labels)}不等于边数{num_edges}"
-                            print(f"✅ 权威边标签生成完成: 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)}")
-                        else:
-                            # 🛡️ 移除占位符：必须生成与边数匹配的标签
-                            if src_nodes is None or dst_nodes is None:
-                                print(f"⚠️ 无法获取边信息，生成空边标签: 文件={graph_file}")
-                                edge_labels = torch.empty(0, dtype=torch.float32)
-                            else:
-                                print(f"⚠️ 风险分数不匹配，生成默认边标签: 风险分数数={len(risk_scores)}, 最大节点索引={max(src_nodes.max(), dst_nodes.max())}")
-                                # 生成默认平衡标签，确保长度=边数
-                                edge_labels = torch.zeros(num_edges, dtype=torch.float32)
-                                # 20%作为正样本
-                                num_positive = max(1, num_edges // 5)
-                                positive_indices = torch.randperm(num_edges)[:num_positive]
-                                edge_labels[positive_indices] = 1.0
-                                
-                            # 🛡️ 最终验证
-                            assert len(edge_labels) == num_edges, f"❌ 默认边标签长度{len(edge_labels)}不等于边数{num_edges}"
+                        if idx % 50 == 0:  # 每50个样本打印一次缓存状态
+                            print(f"🚀 样本{idx}: 使用边标签缓存 - 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)} "
+                                  f"({edge_labels.sum().item()/max(len(edge_labels), 1)*100:.1f}%)")
                     else:
-                        # 空图的情况 - 长度为0的边标签
-                        edge_labels = torch.empty(0, dtype=torch.float32)
+                        # 回退到原始边标签生成逻辑
+                        edge_labels = self._generate_edge_labels_fallback(graph, risk_scores, str(graph_file))
+                        
+                        if idx % 50 == 0:
+                            print(f"🔧 样本{idx}: 使用原始生成逻辑 - 正样本={edge_labels.sum().item():.0f}/{len(edge_labels)}")
+                    
+                    # 🛡️ 严格验证：确保标签长度=边数
+                    num_edges = graph.number_of_edges()
+                    if len(edge_labels) != num_edges:
+                        print(f"⚠️ 边标签长度不匹配，重新生成: 期望{num_edges}, 实际{len(edge_labels)}")
+                        edge_labels = self._generate_edge_labels_fallback(graph, risk_scores, str(graph_file))
+                        
+                    # 最终验证
+                    assert len(edge_labels) == num_edges, f"❌ 边标签长度{len(edge_labels)}不等于边数{num_edges}"
             
             # 🛡️ 强制edge_labels类型检查和修复
             if not torch.is_tensor(edge_labels):
@@ -513,6 +443,123 @@ class RiskNICLPDataset(Dataset):
             import traceback
             traceback.print_exc()
             raise e
+
+    def _generate_edge_labels_fallback(self, graph: dgl.DGLGraph, risk_scores: torch.Tensor, graph_file: str) -> torch.Tensor:
+        """
+        边标签生成的备用方法（当缓存不可用时使用）
+        
+        Args:
+            graph: DGL图
+            risk_scores: 节点风险分数
+            graph_file: 图文件路径
+            
+        Returns:
+            edge_labels: 边标签张量
+        """
+        num_edges = graph.number_of_edges()
+        if num_edges == 0:
+            return torch.empty(0, dtype=torch.float32)
+        
+        try:
+            # 获取所有边的源节点和目标节点
+            all_src_nodes = []
+            all_dst_nodes = []
+            
+            if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
+                # 异质图：遍历所有边类型
+                for etype in graph.etypes:
+                    try:
+                        src, dst = graph.edges(etype=etype)
+                        all_src_nodes.append(src)
+                        all_dst_nodes.append(dst)
+                    except Exception as e:
+                        print(f"⚠️ 处理边类型 {etype} 时出错: {e}")
+                        continue
+                
+                if all_src_nodes and all_dst_nodes:
+                    src_nodes = torch.cat(all_src_nodes)
+                    dst_nodes = torch.cat(all_dst_nodes)
+                else:
+                    return torch.empty(0, dtype=torch.float32)
+            else:
+                # 同质图：直接获取边
+                try:
+                    src_nodes, dst_nodes = graph.edges()
+                except Exception as e:
+                    print(f"⚠️ 同质图边获取失败: {e}")
+                    return torch.empty(0, dtype=torch.float32)
+            
+            # 确保风险分数覆盖所有节点
+            max_node_id = max(src_nodes.max().item(), dst_nodes.max().item())
+            if len(risk_scores) <= max_node_id:
+                # 扩展风险分数
+                extended_risk = torch.zeros(max_node_id + 1)
+                extended_risk[:len(risk_scores)] = risk_scores
+                risk_scores = extended_risk
+            
+            # 计算边的风险分数
+            src_risks = risk_scores[src_nodes]
+            dst_risks = risk_scores[dst_nodes]
+            edge_risk_scores = (src_risks + dst_risks) / 2.0
+            
+            # 基于边类型语义定义正样本
+            if hasattr(graph, 'etypes') and len(graph.etypes) > 1:
+                # 异质图：基于边类型语义定义正样本
+                edge_labels = torch.zeros(num_edges, dtype=torch.float32)
+                edge_offset = 0
+                
+                for etype in graph.etypes:
+                    src, dst = graph.edges(etype=etype)
+                    num_etype_edges = len(src)
+                    
+                    if num_etype_edges > 0:
+                        # 基于边类型的正样本比例
+                        if etype == 'triggers':
+                            pos_ratio = 0.8
+                        elif etype == 'initiates':
+                            pos_ratio = 0.4
+                        elif etype == 'temporal_adj':
+                            pos_ratio = 0.15
+                        else:
+                            pos_ratio = 0.1
+                        
+                        # 基于风险分数优选正样本
+                        if len(src) > 0 and edge_offset + len(src) <= len(edge_risk_scores):
+                            etype_edge_risks = edge_risk_scores[edge_offset:edge_offset + num_etype_edges]
+                            num_positive = max(1, int(num_etype_edges * pos_ratio))
+                            
+                            # 选择风险最高的边作为正样本
+                            if len(etype_edge_risks) > 0:
+                                top_indices = torch.topk(
+                                    etype_edge_risks, 
+                                    min(num_positive, len(etype_edge_risks))
+                                ).indices
+                                edge_labels[edge_offset + top_indices] = 1.0
+                        
+                        edge_offset += num_etype_edges
+            else:
+                # 同质图：基于风险分数分层
+                risk_threshold = torch.quantile(edge_risk_scores, 0.7)
+                edge_labels = (edge_risk_scores > risk_threshold).float()
+                
+                # 确保至少20%正样本
+                min_positive = max(1, int(len(edge_labels) * 0.2))
+                if edge_labels.sum() < min_positive:
+                    top_indices = torch.topk(edge_risk_scores, min_positive).indices
+                    edge_labels[top_indices] = 1.0
+            
+            return edge_labels
+            
+        except Exception as e:
+            print(f"⚠️ 备用边标签生成失败: {e}")
+            # 最后的兜底方案：生成默认平衡标签
+            edge_labels = torch.zeros(num_edges, dtype=torch.float32)
+            if num_edges > 0:
+                num_positive = max(1, num_edges // 5)
+                positive_indices = torch.randperm(num_edges)[:num_positive]
+                edge_labels[positive_indices] = 1.0
+            
+            return edge_labels
 
 
 class GraphDataLoader:

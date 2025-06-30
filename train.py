@@ -15,6 +15,13 @@ import time
 import argparse
 from pathlib import Path
 import random
+import signal
+import atexit
+import threading
+import gc
+import warnings
+from typing import List
+warnings.filterwarnings('ignore', category=FutureWarning)
 
 # Add src to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -32,6 +39,56 @@ from src.common import (
 from src.data import FeatureProcessor, RiskVectorizer, RiskNICLPDataset
 from src.models import RiskNICLPModel, ProgressiveTrainer
 from src.evaluation import RiskNICLPEvaluator
+
+# Global variables for cleanup
+_active_dataloaders: List[DataLoader] = []
+_cleanup_lock = threading.Lock()
+_is_cleaning_up = False
+
+def _cleanup_dataloaders():
+    """Safely cleanup all active DataLoaders"""
+    global _is_cleaning_up
+    
+    with _cleanup_lock:
+        if _is_cleaning_up:
+            return
+        _is_cleaning_up = True
+        
+        try:
+            for loader in _active_dataloaders:
+                if hasattr(loader, '_iterator') and loader._iterator is not None:
+                    try:
+                        # Give workers time to finish current batches
+                        time.sleep(0.1)
+                        del loader._iterator
+                    except:
+                        pass
+                        
+                # Force garbage collection to clean up worker processes
+                gc.collect()
+                
+        except Exception as e:
+            print(f"Warning: Error during DataLoader cleanup: {e}")
+        finally:
+            _active_dataloaders.clear()
+
+def _signal_handler(signum, frame):
+    """Handle SIGINT (Ctrl+C) gracefully"""
+    print("\n🛑 收到中断信号，正在清理资源...")
+    _cleanup_dataloaders()
+    print("✅ 资源清理完成")
+    sys.exit(0)
+
+def _register_dataloader(loader: DataLoader):
+    """Register a DataLoader for cleanup"""
+    with _cleanup_lock:
+        if not _is_cleaning_up:
+            _active_dataloaders.append(loader)
+
+# Register signal handlers and cleanup functions
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+atexit.register(_cleanup_dataloaders)
 
 def graph_collate_fn(batch):
     """Simplified custom collate function for DGL graphs"""
@@ -370,18 +427,21 @@ def prepare_data(config, logger):
         shuffle=True,
         **dataloader_kwargs
     )
+    _register_dataloader(train_loader)
     
     val_loader = DataLoader(
         val_dataset,
         shuffle=False,
         **dataloader_kwargs
     )
+    _register_dataloader(val_loader)
     
     test_loader = DataLoader(
         test_dataset,
         shuffle=False,
         **dataloader_kwargs
     )
+    _register_dataloader(test_loader)
     
     return {
         'train_loader': train_loader,
@@ -544,12 +604,52 @@ def main():
         # Create evaluator
         evaluator = create_evaluator(model, config, data_info, logger)
         
+        # 🔥 修复：安全的梯度调试钩子注册
+        debug_hooks = []
+        try:
+            # 只在有可训练风险参数时注册钩子
+            risk_params_trainable = any(p.requires_grad for name, p in model.named_parameters() 
+                                       if any(keyword in name for keyword in ['beta', 'temperature']))
+            
+            if risk_params_trainable:
+                debug_hooks = register_debug_hooks(model)
+                logger.logger.info(f"✅ 梯度调试钩子已注册: {len(debug_hooks)} 个")
+            else:
+                logger.logger.info("ℹ️ 当前阶段无可训练风险参数，跳过梯度钩子注册")
+            
+        except Exception as e:
+            logger.logger.warning(f"⚠️ 梯度钩子注册失败: {e}，继续训练")
+            debug_hooks = []
+        
         # Train model
         logger.logger.info("🚀 Starting training...")
+        
+        # 🔥 修改训练流程，集成梯度诊断
+        if debug_hooks:
+            # 获取第一个batch用于诊断
+            sample_batch = next(iter(data_info['train_loader']))
+            
+            logger.logger.info("🔥 执行训练前梯度诊断...")
+            diagnosis_results = comprehensive_gradient_diagnosis(
+                model=model, 
+                batch=sample_batch, 
+                optimizer=trainer.optimizer
+            )
+            
+            # 注册hooks监控训练过程
+            logger.logger.info("🔍 已注册梯度监控hooks")
+        
+        # 执行渐进式训练
         trained_model = trainer.train_progressive(
             data_info['train_loader'],
             data_info['val_loader']
         )
+        
+        # 清理hooks
+        if debug_hooks:
+            for hook in debug_hooks:
+                hook.remove()
+            logger.logger.info("🧹 已清理梯度监控hooks")
         
         # Final evaluation
         logger.logger.info("🎯 Running final evaluation...")
@@ -583,7 +683,7 @@ def main():
                     logger.logger.info(f"  采样策略: {dataset.negative_sampler.strategy}")
             else:
                 logger.logger.warning("  ⚠️ 负采样器未正确初始化")
-            
+             
             # 验证批次中是否包含正负样本边
             train_loader = data_info['train_loader']
             batch_sample = next(iter(train_loader))
@@ -600,15 +700,23 @@ def main():
         return trained_model
         
     except KeyboardInterrupt:
-        logger.logger.info("⏹️ Training interrupted by user")
+        if 'logger' in locals():
+            logger.logger.info("⏹️ Training interrupted by user")
+        print("⏹️ Training interrupted by user")
+        _cleanup_dataloaders()
         sys.exit(1)
         
     except Exception as e:
-        logger.logger.error(f"❌ Training failed: {str(e)}")
+        if 'logger' in locals():
+            logger.logger.error(f"❌ Training failed: {str(e)}")
+        else:
+            print(f"❌ Training failed: {str(e)}")
+        _cleanup_dataloaders()
         raise
         
     finally:
-        # Cleanup
+        # Cleanup resources
+        _cleanup_dataloaders()
         if 'logger' in locals():
             logger.finish()
 
