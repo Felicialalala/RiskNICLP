@@ -181,7 +181,9 @@ class RiskGravityDecoder(nn.Module):
         
         # 🔥 关键修复：约束温度参数，防止过小导致饱和
         temperature_clamped = torch.clamp(self.temperature, self.temp_min, self.temp_max)
-        scores = torch.sigmoid(force / temperature_clamped)
+        # 🔧 修复：输出logits而不是sigmoid概率，让损失函数处理数值稳定性
+        logits = force / temperature_clamped
+        scores = logits  # 返回原始logits
         
         if return_components:
             components = {

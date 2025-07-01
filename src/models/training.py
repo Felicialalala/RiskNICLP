@@ -53,10 +53,14 @@ class ProgressiveTrainer:
         self.negative_sampling_config = {}
         self.pos_neg_ratio_monitor = {'positive': 0, 'negative': 0}
         
-        if hasattr(config, 'phase2') and hasattr(config.phase2, 'negative_sampling'):
+        # 🔥 修复：正确检查phase2配置中的negative_sampling
+        if hasattr(config, 'phase2') and 'negative_sampling' in config.phase2:
             self.negative_sampling_config = config.phase2['negative_sampling']
             self.negative_sampling_enabled = self.negative_sampling_config.get('enabled', False)
-            logger.logger.info(f"🎯 负采样平衡训练已启用: {self.negative_sampling_config.get('strategy', 'unknown')}")
+            if self.negative_sampling_enabled:
+                logger.logger.info(f"🎯 负采样平衡训练已启用: {self.negative_sampling_config.get('strategy', 'unknown')}, 负样本比例: {self.negative_sampling_config.get('neg_ratio', 3)}:1")
+            else:
+                logger.logger.info("⚠️ 负采样配置存在但被禁用")
         else:
             logger.logger.info("📊 负采样配置未找到，使用默认图级别训练")
         
@@ -200,8 +204,10 @@ class ProgressiveTrainer:
             if hasattr(self.model, 'training_phase'):
                 self.model.training_phase = current_phase
             
-            # 🔥 新增：更新风险偏置注意力层的训练阶段
-            self._update_risk_attention_stage(current_phase)
+            # 🔥 修复：只在第一个epoch或当前epoch为阶段开始时更新注意力层阶段
+            # 避免重复更新（阶段切换时已经更新过）
+            if epoch == 0 or epoch == phase_start_epoch:
+                self._update_risk_attention_stage(current_phase)
             
             # Training phase  
             train_loss = self.train_epoch(train_loader)
@@ -239,6 +245,9 @@ class ProgressiveTrainer:
                 current_phase = next_phase
                 self.current_phase = current_phase  # 🔥 同步更新实例变量
                 phase_start_epoch = epoch + 1  # 🔥 修复：下一个阶段从下个epoch开始
+                
+                # 🔥 关键修复：立即更新注意力层的训练阶段，确保风险偏置计算正确启用
+                self._update_risk_attention_stage(current_phase)
                 
                 # 🔥 修复：使用统一的参数解冻方法
                 if current_phase == 'risk_aware':
@@ -288,19 +297,8 @@ class ProgressiveTrainer:
             # Update scheduler
             self.scheduler.step()
             
-            # 🔥 风险偏置健康监控
-            if current_phase in ['risk_aware', 'full_fusion']:
-                # 在Risk-aware阶段进行深度诊断
-                try:
-                    from .risk_bias_diagnostic import RiskBiasIntelligentDiagnostic
-                    diagnostic = RiskBiasIntelligentDiagnostic(
-                        model=self.model, 
-                        logger=self.logger, 
-                        training_stage=current_phase
-                    )
-                    diagnostic.comprehensive_risk_bias_diagnosis()
-                except Exception as e:
-                    self.logger.logger.warning(f"风险偏置诊断失败: {e}")
+            # 🔥 修复：推迟风险偏置诊断到训练后
+            # 不在阶段切换后立即诊断，而是在训练几个batch后进行
             
             # Enhanced logging with phase info
             phase_desc = phases[current_phase]['description']
@@ -766,6 +764,20 @@ class ProgressiveTrainer:
                 if self.current_phase == 'basic':
                     self._clear_frozen_parameter_gradients()
                 
+                # 🔧 新增：pos_weight和损失监控 (每10个batch记录一次)
+                if batch_idx % 10 == 0:
+                    current_pos_weight = batch.get('pos_weight', 1.0)
+                    if 'edge_labels' in batch:
+                        edge_labels = batch['edge_labels']
+                        pos_ratio = (edge_labels == 1).sum().item() / len(edge_labels) if len(edge_labels) > 0 else 0
+                        neg_ratio = 1 - pos_ratio
+                        
+                        self.logger.logger.info(
+                            f"📊 Batch {batch_idx}: Loss={loss:.4f}, "
+                            f"pos_weight={current_pos_weight:.2f}, "
+                            f"正样本比例={pos_ratio:.1%}, 负样本比例={neg_ratio:.1%}"
+                        )
+                
                 # SOTA梯度监控 (每50个batch监控一次)
                 if batch_idx % 50 == 0:
                     grad_stats = self._monitor_gradients()
@@ -786,6 +798,21 @@ class ProgressiveTrainer:
                             self.logger.logger.warning(f"❌ {self.current_phase.upper()}阶段风险偏置参数没有梯度！")
                         else:
                             self.logger.logger.debug(f"✅ {self.current_phase.upper()}阶段：风险参数正常训练")
+                
+                # 🔥 新增：Risk-aware阶段的深度风险偏置诊断（在有梯度后）
+                if (self.current_phase in ['risk_aware', 'full_fusion'] and 
+                    batch_idx == 10):  # 在第10个batch后进行诊断，确保有足够的梯度信息
+                    try:
+                        from .risk_bias_diagnostic import RiskBiasIntelligentDiagnostic
+                        diagnostic = RiskBiasIntelligentDiagnostic(
+                            model=self.model, 
+                            logger=self.logger, 
+                            training_stage=self.current_phase
+                        )
+                        diagnostic.comprehensive_risk_bias_diagnosis()
+                        self.logger.logger.info(f"✅ {self.current_phase.upper()}阶段风险偏置诊断完成（Batch {batch_idx}）")
+                    except Exception as e:
+                        self.logger.logger.warning(f"风险偏置诊断失败: {e}")
                 
                 # Gradient clipping with monitoring
                 grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
@@ -938,10 +965,17 @@ class ProgressiveTrainer:
             all_scores = torch.cat([pos_scores, neg_scores])
             all_labels = torch.cat([pos_labels, neg_labels])
             
-            # 🔥 修复：decoder已经应用了sigmoid，使用BCE而不是BCE_with_logits
-            # Apply BCE loss (decoder output is already sigmoid)
-            all_scores = torch.clamp(all_scores, 1e-7, 1 - 1e-7)  # 数值稳定性
-            loss = F.binary_cross_entropy(all_scores, all_labels)
+            # 🔧 修复：decoder现在输出logits，使用BCEWithLogitsLoss支持pos_weight
+            # 从batch提取pos_weight
+            pos_weight = batch.get('pos_weight', 1.0)
+            if isinstance(pos_weight, (int, float)):
+                pos_weight = torch.tensor(pos_weight, device=self.device)
+            else:
+                pos_weight = pos_weight.to(self.device)
+            
+            # 使用支持pos_weight的损失函数处理数据不平衡
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            loss = criterion(all_scores, all_labels)
             
             return loss
             
@@ -964,6 +998,13 @@ class ProgressiveTrainer:
         """
         # Extract edge labels from batch
         edge_labels = batch['edge_labels'].float()
+        
+        # 🔧 新增：提取pos_weight支持数据不平衡
+        pos_weight = batch.get('pos_weight', 1.0)
+        if isinstance(pos_weight, (int, float)):
+            pos_weight = torch.tensor(pos_weight, device=self.device)
+        else:
+            pos_weight = pos_weight.to(self.device)
         
         # 添加调试信息
         if hasattr(self, '_debug_counter'):
@@ -1000,10 +1041,9 @@ class ProgressiveTrainer:
                         print("⚠️ 检测到预测分数中的NaN/Inf值")
                     fine_scores_flat = torch.nan_to_num(fine_scores_flat, nan=0.0, posinf=1.0, neginf=-1.0)
                 
-                # 使用label smoothing提高稳定性 - SOTA实践
-                smoothed_labels = edge_labels_flat * 0.9 + 0.05
-                
-                loss = F.binary_cross_entropy_with_logits(fine_scores_flat, smoothed_labels)
+                # 🔧 修复：使用pos_weight处理数据不平衡，去除label smoothing避免干扰
+                criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+                loss = criterion(fine_scores_flat, edge_labels_flat)
                 
                 # 验证损失值
                 if torch.isnan(loss) or torch.isinf(loss):
@@ -1015,7 +1055,8 @@ class ProgressiveTrainer:
                 if coarse_scores is not None and coarse_scores.numel() > 0:
                     coarse_scores_flat = coarse_scores.flatten()[:len(edge_labels_flat)]
                     try:
-                        coarse_loss = F.binary_cross_entropy_with_logits(coarse_scores_flat, edge_labels_flat)
+                        coarse_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+                        coarse_loss = coarse_criterion(coarse_scores_flat, edge_labels_flat)
                         if not torch.isnan(coarse_loss) and not torch.isinf(coarse_loss):
                             loss = 0.7 * loss + 0.3 * coarse_loss
                     except:
@@ -1030,13 +1071,13 @@ class ProgressiveTrainer:
             except Exception as e:
                 if debug_enabled:
                     print(f"❌ 损失计算异常: {e}, 使用SOTA备用方法")
-                # SOTA稳定损失计算 - 使用smoothed labels
-                smoothed_labels = edge_labels_flat * 0.9 + 0.05
-                probs = torch.sigmoid(fine_scores_flat)
-                probs = torch.clamp(probs, 1e-7, 1 - 1e-7)
-                stable_loss = -(smoothed_labels * torch.log(probs) + 
-                               (1 - smoothed_labels) * torch.log(1 - probs)).mean()
-                return stable_loss if not torch.isnan(stable_loss) else torch.tensor(0.5, requires_grad=True, device=self.device)
+                # 🔧 修复备用损失计算：使用pos_weight的稳定实现
+                try:
+                    fallback_criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+                    stable_loss = fallback_criterion(fine_scores_flat, edge_labels_flat)
+                    return stable_loss if not torch.isnan(stable_loss) else torch.tensor(0.5, requires_grad=True, device=self.device)
+                except:
+                    return torch.tensor(0.5, requires_grad=True, device=self.device)
         else:
             # Fallback for empty predictions
             return torch.tensor(0.5, requires_grad=True, device=self.device) 

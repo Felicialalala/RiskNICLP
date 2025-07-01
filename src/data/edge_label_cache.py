@@ -7,6 +7,7 @@ Edge Label Cache System for RiskNICLP-5G
 
 import os
 import pickle
+import gzip
 import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
@@ -14,6 +15,8 @@ import torch
 import dgl
 import numpy as np
 from tqdm import tqdm
+from datetime import datetime
+import json
 
 from ..common.logger import get_logger
 
@@ -373,4 +376,541 @@ class EdgeLabelCache:
             'cache_dir': str(self.cache_dir),
             'total_size_mb': total_size / (1024 * 1024),
             'index_entries': len(self.cache_index)
+        }
+
+class PositiveNegativeSampleCache(EdgeLabelCache):
+    """正负采样结果缓存管理器 - 扩展EdgeLabelCache"""
+    
+    def __init__(
+        self,
+        cache_dir: str = "data/edge_label_cache",
+        semantic_config: Optional[Dict[str, Any]] = None,
+        sample_cache_dir: Optional[str] = None,
+        max_cache_size_gb: float = 10.0,
+        compression_enabled: bool = True
+    ):
+        """
+        初始化正负采样缓存
+        
+        Args:
+            cache_dir: 边标签缓存目录
+            semantic_config: 边类型语义配置
+            sample_cache_dir: 采样结果缓存目录
+            max_cache_size_gb: 最大缓存大小(GB)
+            compression_enabled: 是否启用压缩存储
+        """
+        # 初始化父类
+        super().__init__(cache_dir, semantic_config)
+        
+        # 采样缓存配置
+        self.sample_cache_dir = Path(sample_cache_dir or cache_dir + "_samples")
+        self.sample_cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.max_cache_size_gb = max_cache_size_gb
+        self.compression_enabled = compression_enabled
+        self.cache_version = "1.0"
+        
+        # 采样缓存索引
+        self.sample_cache_index = {}
+        
+        # 大图检测阈值
+        self.large_graph_threshold = 100000  # 10万边以上认为是大图
+        
+        # 性能统计
+        self.cache_stats = {
+            'hits': 0,
+            'misses': 0,
+            'generation_time': 0.0,
+            'load_time': 0.0
+        }
+        
+        # 加载采样缓存索引
+        self._load_sample_cache_index()
+        
+        self.logger.info(f"🚀 PositiveNegativeSampleCache初始化完成")
+        self.logger.info(f"   📂 采样缓存目录: {self.sample_cache_dir}")
+        self.logger.info(f"   💾 压缩存储: {'启用' if compression_enabled else '禁用'}")
+        self.logger.info(f"   📊 缓存大小限制: {max_cache_size_gb}GB")
+    
+    def _load_sample_cache_index(self):
+        """加载采样缓存索引"""
+        index_file = self.sample_cache_dir / "sample_cache_index.pkl"
+        if index_file.exists():
+            try:
+                with open(index_file, 'rb') as f:
+                    self.sample_cache_index = pickle.load(f)
+                self.logger.info(f"📂 加载采样缓存索引: {len(self.sample_cache_index)} 个文件")
+            except Exception as e:
+                self.logger.warning(f"⚠️ 采样缓存索引加载失败: {e}")
+                self.sample_cache_index = {}
+    
+    def _save_sample_cache_index(self):
+        """保存采样缓存索引"""
+        index_file = self.sample_cache_dir / "sample_cache_index.pkl"
+        try:
+            with open(index_file, 'wb') as f:
+                pickle.dump(self.sample_cache_index, f)
+        except Exception as e:
+            self.logger.error(f"❌ 采样缓存索引保存失败: {e}")
+    
+    def _get_sample_cache_key(
+        self, 
+        graph_file: str, 
+        edge_labels: torch.Tensor,
+        risk_scores: torch.Tensor,
+        sampler_config: Dict[str, Any]
+    ) -> str:
+        """
+        生成采样缓存键
+        
+        Args:
+            graph_file: 图文件路径
+            edge_labels: 边标签张量
+            risk_scores: 风险分数张量
+            sampler_config: 采样器配置
+            
+        Returns:
+            cache_key: 缓存键字符串
+        """
+        # 图文件哈希
+        file_hash = hashlib.md5(str(graph_file).encode()).hexdigest()[:8]
+        
+        # 边标签哈希
+        label_hash = hashlib.md5(edge_labels.numpy().tobytes()).hexdigest()[:8]
+        
+        # 风险分数哈希
+        risk_hash = hashlib.md5(risk_scores.numpy().tobytes()).hexdigest()[:8]
+        
+        # 采样配置哈希
+        config_str = json.dumps(sampler_config, sort_keys=True)
+        config_hash = hashlib.md5(config_str.encode()).hexdigest()[:8]
+        
+        # 版本号
+        version_hash = hashlib.md5(self.cache_version.encode()).hexdigest()[:4]
+        
+        return f"{file_hash}_{label_hash}_{risk_hash}_{config_hash}_{version_hash}"
+    
+    def _get_sample_cache_path(self, cache_key: str) -> Path:
+        """获取采样缓存文件路径"""
+        if self.compression_enabled:
+            return self.sample_cache_dir / f"samples_{cache_key}.pkl.gz"
+        else:
+            return self.sample_cache_dir / f"samples_{cache_key}.pkl"
+    
+    def _detect_large_graph(self, graph: dgl.DGLGraph) -> bool:
+        """检测是否为大图"""
+        return graph.number_of_edges() > self.large_graph_threshold
+    
+    def _sample_cache_exists(self, cache_key: str) -> bool:
+        """检查采样缓存是否存在"""
+        cache_path = self._get_sample_cache_path(cache_key)
+        return cache_path.exists()
+    
+    def _load_sample_cache(self, cache_key: str) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        加载采样缓存
+        
+        Args:
+            cache_key: 缓存键
+            
+        Returns:
+            Tuple[positive_edges, negative_edges]: 正样本边和负样本边
+        """
+        cache_path = self._get_sample_cache_path(cache_key)
+        
+        start_time = datetime.now()
+        
+        try:
+            if self.compression_enabled:
+                with gzip.open(cache_path, 'rb') as f:
+                    cached_data = pickle.load(f)
+            else:
+                with open(cache_path, 'rb') as f:
+                    cached_data = pickle.load(f)
+            
+            # 验证缓存数据完整性
+            if ('positive_edges' not in cached_data or 
+                'negative_edges' not in cached_data or
+                'metadata' not in cached_data):
+                raise ValueError("缓存数据格式不完整")
+            
+            # 验证版本兼容性
+            metadata = cached_data['metadata']
+            if metadata.get('cache_version') != self.cache_version:
+                raise ValueError(f"缓存版本不兼容: {metadata.get('cache_version')} != {self.cache_version}")
+            
+            positive_edges = cached_data['positive_edges']
+            negative_edges = cached_data['negative_edges']
+            
+            # 类型检查
+            if not torch.is_tensor(positive_edges) or not torch.is_tensor(negative_edges):
+                raise ValueError("缓存的采样结果类型错误")
+            
+            load_time = (datetime.now() - start_time).total_seconds()
+            self.cache_stats['load_time'] += load_time
+            self.cache_stats['hits'] += 1
+            
+            self.logger.debug(f"📂 采样缓存加载成功: {cache_key} ({load_time:.3f}s)")
+            
+            return positive_edges, negative_edges
+            
+        except Exception as e:
+            self.logger.warning(f"⚠️ 采样缓存加载失败 {cache_key}: {e}")
+            # 删除损坏的缓存文件
+            if cache_path.exists():
+                cache_path.unlink()
+            raise e
+    
+    def _save_sample_cache(
+        self,
+        cache_key: str,
+        positive_edges: torch.Tensor,
+        negative_edges: torch.Tensor,
+        metadata: Dict[str, Any]
+    ):
+        """
+        保存采样缓存
+        
+        Args:
+            cache_key: 缓存键
+            positive_edges: 正样本边
+            negative_edges: 负样本边
+            metadata: 元数据
+        """
+        cache_path = self._get_sample_cache_path(cache_key)
+        
+        try:
+            # 准备缓存数据
+            cache_data = {
+                'positive_edges': positive_edges,
+                'negative_edges': negative_edges,
+                'metadata': {
+                    **metadata,
+                    'cache_version': self.cache_version,
+                    'generation_time': datetime.now().isoformat(),
+                    'compression_enabled': self.compression_enabled
+                }
+            }
+            
+            # 保存到文件
+            if self.compression_enabled:
+                with gzip.open(cache_path, 'wb') as f:
+                    pickle.dump(cache_data, f)
+            else:
+                with open(cache_path, 'wb') as f:
+                    pickle.dump(cache_data, f)
+            
+            # 更新索引
+            self.sample_cache_index[cache_key] = str(cache_path)
+            
+            # 检查缓存大小
+            self._check_cache_size()
+            
+            self.logger.debug(f"💾 采样缓存保存成功: {cache_key}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ 采样缓存保存失败 {cache_key}: {e}")
+            # 清理失败的缓存文件
+            if cache_path.exists():
+                cache_path.unlink()
+    
+    def _check_cache_size(self):
+        """检查并管理缓存大小"""
+        try:
+            # 计算当前缓存大小
+            total_size = 0
+            cache_files = []
+            
+            for cache_file in self.sample_cache_dir.glob("samples_*.pkl*"):
+                if cache_file.exists():
+                    file_size = cache_file.stat().st_size
+                    total_size += file_size
+                    cache_files.append((cache_file, file_size, cache_file.stat().st_mtime))
+            
+            current_size_gb = total_size / (1024 ** 3)
+            
+            # 如果超过限制，删除最旧的缓存
+            if current_size_gb > self.max_cache_size_gb:
+                self.logger.warning(f"⚠️ 缓存大小超限: {current_size_gb:.2f}GB > {self.max_cache_size_gb}GB")
+                
+                # 按修改时间排序，删除最旧的文件
+                cache_files.sort(key=lambda x: x[2])  # 按修改时间排序
+                
+                removed_size = 0
+                removed_count = 0
+                target_size_gb = self.max_cache_size_gb * 0.8  # 清理到80%
+                
+                for cache_file, file_size, _ in cache_files:
+                    if current_size_gb - removed_size / (1024 ** 3) <= target_size_gb:
+                        break
+                    
+                    cache_file.unlink()
+                    removed_size += file_size
+                    removed_count += 1
+                
+                self.logger.info(f"🗑️ 清理旧缓存: {removed_count} 个文件 ({removed_size / (1024**2):.1f}MB)")
+        
+        except Exception as e:
+            self.logger.error(f"❌ 缓存大小检查失败: {e}")
+    
+    def _generate_and_cache_samples(
+        self,
+        graph: dgl.DGLGraph,
+        edge_labels: torch.Tensor,
+        risk_scores: torch.Tensor,
+        negative_sampler,
+        graph_file: str,
+        cache_key: str
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        生成并缓存正负采样结果
+        
+        Args:
+            graph: DGL图
+            edge_labels: 边标签
+            risk_scores: 风险分数
+            negative_sampler: 负采样器实例
+            graph_file: 图文件路径
+            cache_key: 缓存键
+            
+        Returns:
+            Tuple[positive_edges, negative_edges]: 正负样本边
+        """
+        start_time = datetime.now()
+        
+        try:
+            # 提取正样本边
+            all_edges = self._extract_all_edges(graph)
+            positive_mask = edge_labels == 1
+            positive_edges = all_edges[positive_mask]
+            
+            # 生成负样本边
+            negative_edges = negative_sampler.sample_negatives(graph, positive_edges, risk_scores)
+            
+            generation_time = (datetime.now() - start_time).total_seconds()
+            self.cache_stats['generation_time'] += generation_time
+            self.cache_stats['misses'] += 1
+            
+            # 准备元数据
+            metadata = {
+                'graph_file': graph_file,
+                'num_positive': len(positive_edges),
+                'num_negative': len(negative_edges),
+                'sampling_ratio': len(negative_edges) / max(len(positive_edges), 1),
+                'sampler_type': type(negative_sampler).__name__,
+                'graph_stats': {
+                    'num_nodes': graph.number_of_nodes(),
+                    'num_edges': graph.number_of_edges(),
+                    'is_large_graph': self._detect_large_graph(graph)
+                },
+                'generation_time_seconds': generation_time
+            }
+            
+            # 保存到缓存
+            self._save_sample_cache(cache_key, positive_edges, negative_edges, metadata)
+            
+            self.logger.debug(f"🔄 生成采样结果: 正边={len(positive_edges)}, 负边={len(negative_edges)} ({generation_time:.3f}s)")
+            
+            return positive_edges, negative_edges
+            
+        except Exception as e:
+            self.logger.error(f"❌ 生成采样结果失败: {e}")
+            raise e
+    
+    def _extract_all_edges(self, graph: dgl.DGLGraph) -> torch.Tensor:
+        """提取图中的所有边"""
+        if graph.is_homogeneous:
+            src, dst = graph.edges()
+            return torch.stack([src, dst], dim=1)
+        else:
+            # 异质图：收集所有边类型的边
+            all_edges_list = []
+            for etype in graph.etypes:
+                src, dst = graph.edges(etype=etype)
+                if len(src) > 0:
+                    edges = torch.stack([src, dst], dim=1)
+                    all_edges_list.append(edges)
+            
+            if all_edges_list:
+                return torch.cat(all_edges_list, dim=0)
+            else:
+                return torch.empty((0, 2), dtype=torch.long)
+    
+    def get_or_generate_samples(
+        self,
+        graph: dgl.DGLGraph,
+        edge_labels: torch.Tensor,
+        risk_scores: torch.Tensor,
+        negative_sampler,
+        graph_file: str,
+        force_regenerate: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        获取或生成正负采样结果（主接口）
+        
+        Args:
+            graph: DGL图
+            edge_labels: 边标签张量
+            risk_scores: 风险分数张量
+            negative_sampler: 负采样器实例
+            graph_file: 图文件路径
+            force_regenerate: 强制重新生成
+            
+        Returns:
+            Tuple[positive_edges, negative_edges]: 正负样本边
+        """
+        # 获取采样器配置
+        sampler_config = negative_sampler.get_config()
+        
+        # 生成缓存键
+        cache_key = self._get_sample_cache_key(graph_file, edge_labels, risk_scores, sampler_config)
+        
+        # 检查缓存
+        if not force_regenerate and self._sample_cache_exists(cache_key):
+            try:
+                positive_edges, negative_edges = self._load_sample_cache(cache_key)
+                self.logger.debug(f"🚀 采样缓存命中: {Path(graph_file).name}")
+                return positive_edges, negative_edges
+            except Exception as e:
+                self.logger.warning(f"⚠️ 缓存加载失败，重新生成: {e}")
+        
+        # 生成新的采样结果
+        self.logger.debug(f"🔄 生成新采样结果: {Path(graph_file).name}")
+        return self._generate_and_cache_samples(
+            graph, edge_labels, risk_scores, negative_sampler, graph_file, cache_key
+        )
+    
+    def precompute_all_samples(
+        self,
+        graph_files: List[str],
+        get_graph_data_fn,
+        negative_sampler,
+        force_regenerate: bool = False
+    ) -> Dict[str, Any]:
+        """
+        预计算所有图的正负采样结果
+        
+        Args:
+            graph_files: 图文件路径列表
+            get_graph_data_fn: 获取图数据的函数 (返回graph, edge_labels, risk_scores)
+            negative_sampler: 负采样器实例
+            force_regenerate: 强制重新生成
+            
+        Returns:
+            statistics: 预计算统计信息
+        """
+        self.logger.info(f"🚀 开始预计算采样结果: {len(graph_files)} 个图文件")
+        
+        stats = {
+            'total_files': len(graph_files),
+            'cached_files': 0,
+            'generated_files': 0,
+            'failed_files': 0,
+            'total_positive_edges': 0,
+            'total_negative_edges': 0,
+            'total_generation_time': 0.0,
+            'error_files': []
+        }
+        
+        for graph_file in tqdm(graph_files, desc="预计算采样结果"):
+            try:
+                # 获取图数据
+                graph, edge_labels, risk_scores = get_graph_data_fn(graph_file)
+                
+                # 获取采样器配置和缓存键
+                sampler_config = negative_sampler.get_config()
+                cache_key = self._get_sample_cache_key(graph_file, edge_labels, risk_scores, sampler_config)
+                
+                if not force_regenerate and self._sample_cache_exists(cache_key):
+                    stats['cached_files'] += 1
+                    try:
+                        positive_edges, negative_edges = self._load_sample_cache(cache_key)
+                        stats['total_positive_edges'] += len(positive_edges)
+                        stats['total_negative_edges'] += len(negative_edges)
+                    except:
+                        pass
+                else:
+                    # 生成采样结果
+                    start_time = datetime.now()
+                    positive_edges, negative_edges = self.get_or_generate_samples(
+                        graph, edge_labels, risk_scores, negative_sampler, graph_file, force_regenerate
+                    )
+                    generation_time = (datetime.now() - start_time).total_seconds()
+                    
+                    stats['generated_files'] += 1
+                    stats['total_positive_edges'] += len(positive_edges)
+                    stats['total_negative_edges'] += len(negative_edges)
+                    stats['total_generation_time'] += generation_time
+                    
+            except Exception as e:
+                self.logger.error(f"❌ 处理文件失败 {graph_file}: {e}")
+                stats['failed_files'] += 1
+                stats['error_files'].append(graph_file)
+        
+        # 保存采样缓存索引
+        self._save_sample_cache_index()
+        
+        # 输出统计信息
+        self.logger.info(f"✅ 采样预计算完成:")
+        self.logger.info(f"   📊 处理文件: {stats['generated_files']} 新生成 + {stats['cached_files']} 已缓存")
+        self.logger.info(f"   📊 正样本: {stats['total_positive_edges']:,}")
+        self.logger.info(f"   📊 负样本: {stats['total_negative_edges']:,}")
+        if stats['total_positive_edges'] > 0:
+            ratio = stats['total_negative_edges'] / stats['total_positive_edges']
+            self.logger.info(f"   📊 采样比例: 1:{ratio:.1f}")
+        if stats['total_generation_time'] > 0:
+            self.logger.info(f"   ⏱️ 总生成时间: {stats['total_generation_time']:.1f}s")
+        if stats['failed_files'] > 0:
+            self.logger.warning(f"   ⚠️ 失败文件: {stats['failed_files']}")
+        
+        return stats
+    
+    def clear_sample_cache(self, pattern: Optional[str] = None):
+        """清理采样缓存"""
+        if pattern:
+            # 清理匹配模式的缓存
+            count = 0
+            for cache_file in self.sample_cache_dir.glob(f"*{pattern}*"):
+                cache_file.unlink()
+                count += 1
+            self.logger.info(f"🗑️ 清理采样缓存: {count} 个文件 (模式: {pattern})")
+        else:
+            # 清理所有采样缓存
+            count = 0
+            for cache_file in self.sample_cache_dir.glob("samples_*.pkl*"):
+                cache_file.unlink()
+                count += 1
+            
+            # 清理索引
+            index_file = self.sample_cache_dir / "sample_cache_index.pkl"
+            if index_file.exists():
+                index_file.unlink()
+            
+            self.sample_cache_index = {}
+            self.logger.info(f"🗑️ 清理所有采样缓存: {count} 个文件")
+    
+    def get_sample_cache_stats(self) -> Dict[str, Any]:
+        """获取采样缓存统计信息"""
+        cache_files = list(self.sample_cache_dir.glob("samples_*.pkl*"))
+        total_size = sum(f.stat().st_size for f in cache_files)
+        
+        hit_rate = 0.0
+        if self.cache_stats['hits'] + self.cache_stats['misses'] > 0:
+            hit_rate = self.cache_stats['hits'] / (self.cache_stats['hits'] + self.cache_stats['misses'])
+        
+        return {
+            'cached_files': len(cache_files),
+            'sample_cache_dir': str(self.sample_cache_dir),
+            'total_size_mb': total_size / (1024 * 1024),
+            'max_size_gb': self.max_cache_size_gb,
+            'compression_enabled': self.compression_enabled,
+            'index_entries': len(self.sample_cache_index),
+            'cache_version': self.cache_version,
+            'performance': {
+                'hit_rate': hit_rate,
+                'cache_hits': self.cache_stats['hits'],
+                'cache_misses': self.cache_stats['misses'],
+                'avg_generation_time': self.cache_stats['generation_time'] / max(self.cache_stats['misses'], 1),
+                'avg_load_time': self.cache_stats['load_time'] / max(self.cache_stats['hits'], 1)
+            }
         } 

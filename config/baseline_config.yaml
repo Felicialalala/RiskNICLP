@@ -18,19 +18,19 @@ model:
   num_risk_bins: 8             # Risk discretization bins
   num_heads: 4                 # GAT attention heads
   num_layers: 2                # Number of GNN layers
-  dropout: 0.1                 # Dropout rate
+  dropout: 0.3                 # 🔧 修复：增加dropout缓解过拟合
   temperature: 0.2             # Attention temperature
   gravity_epsilon: 1e-3        # RiskGravity decoder epsilon
 
 # Phase 2 Configuration
 phase2:
-  # Risk-Bias Attention
+  # Risk-Bias Attention  
   risk_bias_attention:
     enabled: true              # Enable risk-bias attention
     method: 'simplified'       # 'simplified' | 'full'
-    beta_1: 1.5                # Source node risk weight
-    beta_2: 1.5                # Destination node risk weight
-    temperature: 0.2           # Risk bias temperature
+    beta_1: 1.2                # 🔧 修复：降低风险权重减少噪声
+    beta_2: 1.2                # 🔧 修复：降低风险权重减少噪声
+    temperature: 0.5           # 🔧 修复：增大温度降低敏感度
     
   # Negative Sampling
   negative_sampling:
@@ -112,11 +112,11 @@ phase2:
 # Training Configuration
 training:
   mode: 'standard'             # Training mode: 'standard' | 'temporal'
-  batch_size: 2                # CPU-friendly batch size
-  accumulate_steps: 2          # Gradient accumulation for effective batch=4
+  batch_size: 4                # 🔧 紧急修复：减少batch_size缓解内存压力
+  accumulate_steps: 2          # 🔧 增加梯度累积保持有效批次=8
   max_epochs: 10               # ✨ v1.3验证: 减少到10 epochs快速验证修复效果
-  learning_rate: 2e-3          # Initial learning rate
-  weight_decay: 5e-5           # L2 regularization
+  learning_rate: 1e-3          # 🔧 修复：降低学习率配合更大批次
+  weight_decay: 1e-3           # 🔧 修复：增强L2正则化缓解过拟合
   direction_penalty_weight: 2.0 # λ_dir for directional loss
   
   # Progressive Training - 🔥 快速验证修复效果
@@ -141,15 +141,23 @@ data:
   cache_dir: "data/csr_cache"               # CSR cache directory
   metadata_dir: "data/processed/metadata"   # Metadata directory
   
+  # 🚀 Enhanced Caching System
+  enable_edge_label_cache: true              # Enable edge label caching
+  enable_sample_cache: true                  # Enable positive/negative sample caching
+  sample_cache_config:
+    max_cache_size_gb: 10.0                  # Maximum cache size (GB)
+    compression_enabled: true                # Enable gzip compression for cache files
+    cache_cleanup_on_config_change: true     # Auto cleanup when sampler config changes
+  
   # Data Splits
   train_ratio: 0.8             # Training set ratio
   val_ratio: 0.1               # Validation set ratio
   test_ratio: 0.1              # Test set ratio
   
   # Data Loading
-  num_workers: 4               # DataLoader workers
-  pin_memory: true             # Pin memory for faster transfer
-  prefetch_factor: 2           # Prefetch factor
+  num_workers: 1               # 🔧 紧急修复：减少workers缓解内存压力
+  pin_memory: false            # 🔧 紧急修复：禁用pin_memory节省内存
+  prefetch_factor: 1           # 🔧 紧急修复：减少预取降低内存占用
   
   # Feature Processing
   feature_selection_method: "hybrid"  # Variance + correlation + domain

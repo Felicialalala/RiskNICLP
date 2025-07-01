@@ -131,7 +131,7 @@ def graph_collate_fn(batch):
         
         batched_edge_labels = torch.cat(edge_labels, dim=0) if edge_labels else torch.empty(0, dtype=torch.float32)
         
-        # 4. Handle positive and negative edges (simplified)
+        # 4. 🔥 修复：正确提取正负样本边，不要从图结构提取所有边
         positive_edges = []
         negative_edges = []
         node_offset = 0
@@ -139,43 +139,22 @@ def graph_collate_fn(batch):
         for item in batch:
             graph = item['graph']
             
-            # Extract positive edges from graph structure
-            if hasattr(graph, 'edges') and graph.number_of_edges() > 0:
-                try:
-                    # 🔧 修复异质图边提取：针对异质图正确处理所有边类型
-                    if not graph.is_homogeneous:
-                        # 异质图：收集所有边类型的边
-                        all_src = []
-                        all_dst = []
-                        for etype in graph.etypes:
-                            src, dst = graph.edges(etype=etype)
-                            if len(src) > 0:
-                                all_src.append(src)
-                                all_dst.append(dst)
-                        
-                        if all_src and all_dst:
-                            combined_src = torch.cat(all_src)
-                            combined_dst = torch.cat(all_dst)
-                            pos_edges = torch.stack([combined_src, combined_dst], dim=1) + node_offset
-                        else:
-                            # 空图的情况
-                            pos_edges = torch.empty((0, 2), dtype=torch.long)
-                    else:
-                        # 同质图：直接调用
-                        src, dst = graph.edges()
-                        pos_edges = torch.stack([src, dst], dim=1) + node_offset
-                    
-                    positive_edges.append(pos_edges)
-                except Exception as e:
-                    print(f"⚠️ 提取边时出错: {e}")
-                    # Fallback: create minimal edges
-                    pos_edges = torch.tensor([[0, 0]], dtype=torch.long) + node_offset
-                    positive_edges.append(pos_edges)
+            # 🔥 修复：使用item中的正负样本边，而不是图中的所有边
+            # 正样本边应该来自于dataset的负采样结果
+            if 'positive_edges' in item and item['positive_edges'] is not None and len(item['positive_edges']) > 0:
+                pos_edges = item['positive_edges'] + node_offset
+                positive_edges.append(pos_edges)
+                print(f"📍 从item提取正样本边: {len(item['positive_edges'])} 条")
+            else:
+                print(f"⚠️ item中缺少positive_edges，样本索引: {item.get('idx', 'unknown')}")
             
-            # Extract negative edges if available
+            # 负样本边
             if 'negative_edges' in item and item['negative_edges'] is not None and len(item['negative_edges']) > 0:
                 neg_edges = item['negative_edges'] + node_offset
                 negative_edges.append(neg_edges)
+                print(f"📍 从item提取负样本边: {len(item['negative_edges'])} 条")
+            else:
+                print(f"⚠️ item中缺少negative_edges，样本索引: {item.get('idx', 'unknown')}")
             
             # Update node offset
             node_offset += graph.number_of_nodes()
@@ -235,10 +214,47 @@ def graph_collate_fn(batch):
                 # 计算正样本权重倍数
                 pos_weight_multiplier = max(pos_weight_multiplier, target_pos_count / max(num_original_pos, 1))
             
-        # 添加增强的正样本边
+        # 🔥 修复2: 正样本去重 + 与负样本冲突检测
         if enhanced_positive_edges:
             enhanced_pos_tensor = torch.tensor(enhanced_positive_edges, dtype=torch.long)
             batched_positive_edges = torch.cat([batched_positive_edges, enhanced_pos_tensor], dim=0)
+        
+        # 去重正样本
+        if len(batched_positive_edges) > 0:
+            original_pos_count = len(batched_positive_edges)
+            batched_positive_edges = torch.unique(batched_positive_edges, dim=0)
+            dedup_pos_count = len(batched_positive_edges)
+            
+            if original_pos_count != dedup_pos_count:
+                print(f"🔧 正样本去重: {original_pos_count} → {dedup_pos_count} (-{original_pos_count - dedup_pos_count} 重复)")
+        
+        # 去重负样本 + 去除与正样本冲突的负样本
+        if len(batched_negative_edges) > 0:
+            original_neg_count = len(batched_negative_edges)
+            
+            # 去重负样本
+            batched_negative_edges = torch.unique(batched_negative_edges, dim=0)
+            
+            # 去除与正样本冲突的负样本（包括反向）
+            if len(batched_positive_edges) > 0:
+                # 创建正样本集合（包括反向）
+                pos_set = set()
+                for pos_edge in batched_positive_edges:
+                    u, v = pos_edge[0].item(), pos_edge[1].item()
+                    pos_set.add((u, v))
+                    pos_set.add((v, u))  # 添加反向边
+                
+                # 过滤冲突的负样本
+                valid_neg_mask = []
+                for neg_edge in batched_negative_edges:
+                    u, v = neg_edge[0].item(), neg_edge[1].item()
+                    valid_neg_mask.append((u, v) not in pos_set)
+                
+                batched_negative_edges = batched_negative_edges[torch.tensor(valid_neg_mask)]
+            
+            final_neg_count = len(batched_negative_edges)
+            if original_neg_count != final_neg_count:
+                print(f"🔧 负样本清理: {original_neg_count} → {final_neg_count} (-{original_neg_count - final_neg_count} 重复/冲突)")
         
         # 动态计算pos_weight用于BCE loss
         total_pos = len(batched_positive_edges)
@@ -386,14 +402,29 @@ def prepare_data(config, logger):
     else:
         logger.logger.info("📋 未启用Phase 2负采样，使用默认baseline采样器")
     
-    # Create dataset
+    # 🚀 Enhanced caching configuration
+    enable_edge_label_cache = getattr(config.data, 'enable_edge_label_cache', True)
+    enable_sample_cache = getattr(config.data, 'enable_sample_cache', True)
+    sample_cache_config = getattr(config.data, 'sample_cache_config', {})
+    
+    logger.logger.info(f"🚀 缓存配置: 边标签缓存={'启用' if enable_edge_label_cache else '禁用'}, "
+                      f"采样缓存={'启用' if enable_sample_cache else '禁用'}")
+    if enable_sample_cache:
+        cache_size = sample_cache_config.get('max_cache_size_gb', 10.0)
+        compression = sample_cache_config.get('compression_enabled', True)
+        logger.logger.info(f"   📊 采样缓存配置: 大小限制={cache_size}GB, 压缩={'启用' if compression else '禁用'}")
+
+    # Create dataset with enhanced caching
     dataset = RiskNICLPDataset(
         graph_dir=config.data.graph_dir,
         metadata_dir=config.data.metadata_dir,
         feature_processor=feature_processor,
         risk_vectorizer=risk_vectorizer,
         cache_manager=None,  # Will be created internally
-        negative_sampler_config=negative_sampler_config  # Pass negative sampling config
+        negative_sampler_config=negative_sampler_config,  # Pass negative sampling config
+        enable_edge_label_cache=enable_edge_label_cache,
+        enable_sample_cache=enable_sample_cache,
+        sample_cache_config=sample_cache_config
     )
     
     # Prepare data (this will fit processors if needed)

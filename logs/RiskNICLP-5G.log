@@ -1,69 +1,334 @@
-2025-06-30 13:55:22,104 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
-2025-06-30 13:55:22,104 - RiskNICLP-5G - INFO - train.py:345 - 🚀 Starting experiment: riskniclp_baseline_20250630_135522
-2025-06-30 13:55:22,105 - RiskNICLP-5G - INFO - train.py:346 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.1, temperature=0.2, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=2, accumulate_steps=2, max_epochs=10, learning_rate='2e-3', weight_decay='5e-5', direction_penalty_weight=2.0, basic_epochs=2, risk_aware_epochs=6, basic_auc_threshold=0.55, risk_recall_threshold=0.65, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=2.0, scheduler_type='cosine', warmup_epochs=1, eta_min_ratio=0.1), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=4, pin_memory=True, prefetch_factor=2, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 1.5, 'beta_2': 1.5, 'temperature': 0.2}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.4, 'UDPFlood': 0.5, 'SYNFlood': 0.7, 'HTTPFlood': 0.8, 'SlowrateDoS': 0.9, 'TCPConnectScan': 0.8, 'SYNScan': 0.7, 'UDPScan': 0.6}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250630_135522', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
-2025-06-30 13:55:22,105 - RiskNICLP-5G - INFO - train.py:592 - 🖥️ Device: cpu
-2025-06-30 13:55:22,105 - RiskNICLP-5G - INFO - train.py:593 - 🧵 Threads: 8
-2025-06-30 13:55:22,105 - RiskNICLP-5G - INFO - train.py:353 - 📊 Preparing data processing pipeline...
-2025-06-30 13:55:22,107 - RiskNICLP-5G - INFO - train.py:380 - 🎯 启用负采样策略: semantic, 负样本比例: 3:1
-2025-06-30 13:55:22,109 - RiskNICLP-5G - INFO - train.py:400 - 🔄 Fitting data processors...
-2025-06-30 13:55:22,111 - RiskNICLP-5G - INFO - train.py:411 - 📈 Data splits: Train=60, Val=7, Test=8
-2025-06-30 13:55:22,113 - RiskNICLP-5G - INFO - train.py:458 - 🏗️ Creating model architecture...
-2025-06-30 13:55:22,124 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 146385.0000, model/trainable_parameters: 146385.0000, model/non_trainable_parameters: 0.0000
-2025-06-30 13:55:22,124 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 146,385 total parameters, 146,385 trainable
-2025-06-30 13:55:22,124 - RiskNICLP-5G - INFO - train.py:488 - 🏃 Setting up progressive trainer...
-2025-06-30 13:55:22,124 - RiskNICLP-5G - INFO - train.py:498 - 🕐 Initializing temporal predictor: hetero_lstm
-2025-06-30 13:55:22,124 - RiskNICLP-5G - INFO - train.py:505 - ✅ Shared encoder passed to temporal predictor
-2025-06-30 13:55:22,126 - RiskNICLP-5G - INFO - train.py:518 - 🚀 Temporal predictor (hetero_lstm) initialized successfully
-2025-06-30 13:55:22,126 - RiskNICLP-5G - INFO - training.py:49 - 🔒 风险参数已冻结（在优化器创建前）
-2025-06-30 13:55:22,126 - RiskNICLP-5G - INFO - training.py:61 - 📊 负采样配置未找到，使用默认图级别训练
-2025-06-30 13:55:22,745 - RiskNICLP-5G - INFO - training.py:79 - ✅ 优化器创建：管理 70 个可训练参数
-2025-06-30 13:55:22,746 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
-2025-06-30 13:55:22,746 - RiskNICLP-5G - INFO - train.py:533 - 📊 Setting up evaluator...
-2025-06-30 13:55:22,746 - RiskNICLP-5G - INFO - train.py:618 - ℹ️ 当前阶段无可训练风险参数，跳过梯度钩子注册
-2025-06-30 13:55:22,747 - RiskNICLP-5G - INFO - train.py:625 - 🚀 Starting training...
-2025-06-30 13:55:22,747 - RiskNICLP-5G - INFO - training.py:153 - 🔍 验证训练状态...
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(basic): 6/6 冻结, 0/6 可训练
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=False, 值=0.20000000298023224
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,748 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=False, 值=0.20000000298023224
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:535 - ✅ Basic阶段：6个风险参数正确冻结
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:545 - ✅ Basic阶段：风险参数正确无梯度
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数已冻结，符合预期
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数无梯度（参数冻结）
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险机制暂未激活（参数冻结）
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Basic阶段: 0/6 参数可训练
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:599 - ✅ 正确：Basic阶段风险机制未激活（所有参数已冻结）
-2025-06-30 13:55:22,749 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:662 - ✅ Basic阶段风险偏置状态验证通过
-2025-06-30 13:55:22,750 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
-2025-06-30 13:55:22,750 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(basic): 6/6 冻结, 0/6 可训练
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=False, 值=0.20000000298023224
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=False, 值=0.20000000298023224
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:535 - ✅ Basic阶段：6个风险参数正确冻结
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:545 - ✅ Basic阶段：风险参数正确无梯度
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
-2025-06-30 13:55:22,751 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数已冻结，符合预期
-2025-06-30 13:55:22,752 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数无梯度（参数冻结）
-2025-06-30 13:55:22,752 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
-2025-06-30 13:55:22,752 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险机制暂未激活（参数冻结）
-2025-06-30 13:55:22,752 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Basic阶段: 0/6 参数可训练
-2025-06-30 13:55:22,752 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:599 - ✅ 正确：Basic阶段风险机制未激活（所有参数已冻结）
-2025-06-30 13:55:22,752 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:662 - ✅ Basic阶段风险偏置状态验证通过
-2025-06-30 13:55:22,753 - RiskNICLP-5G - INFO - training.py:544 - ✅ 训练状态正常: 风险参数 6, 可训练参数 146366/146385, LR=2.00e-03
-2025-06-30 13:55:22,753 - RiskNICLP-5G - INFO - training.py:1113 - 🔧 更新了 2 个风险偏置注意力层的训练阶段: basic
-2025-06-30 13:58:11,375 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第1次, 超时=180s)
-2025-06-30 13:58:12,788 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (1.4s)
-2025-06-30 13:58:12,788 - RiskNICLP-5G - INFO - training.py:307 - 📊 Epoch 1/10 [BASIC]: Train Loss: 0.7429, Val AUC: 0.4995, Phase: Basic GNN feature learning
-2025-06-30 13:58:12,790 - RiskNICLP-5G - INFO - training.py:859 - Checkpoint saved: best_model.pt
-2025-06-30 13:58:12,790 - RiskNICLP-5G - INFO - training.py:319 - 💾 New best model saved (AUC: 0.4995)
-2025-06-30 13:58:12,791 - RiskNICLP-5G - INFO - training.py:1113 - 🔧 更新了 2 个风险偏置注意力层的训练阶段: basic
+2025-07-01 09:51:55,368 - RiskNICLP-5G - INFO - logger.py:262 - Monitoring setup completed
+2025-07-01 09:51:55,368 - RiskNICLP-5G - INFO - train.py:361 - 🚀 Starting experiment: riskniclp_baseline_20250701_095155
+2025-07-01 09:51:55,368 - RiskNICLP-5G - INFO - train.py:362 - 🔧 Configuration: RiskNICLPConfig(model=ModelConfig(node_feature_dims={'Alert': 9, 'Flow': 17, 'UE': 16}, input_dim=112, feature_dim=45, hidden_dim=64, risk_embed_dim=16, num_risk_bins=8, num_heads=4, num_layers=2, dropout=0.3, temperature=0.2, gravity_epsilon='1e-3'), training=TrainingConfig(batch_size=4, accumulate_steps=2, max_epochs=10, learning_rate='1e-3', weight_decay='1e-3', direction_penalty_weight=2.0, basic_epochs=2, risk_aware_epochs=6, basic_auc_threshold=0.55, risk_recall_threshold=0.65, enable_bf16=False, enable_gradient_checkpointing=True, gradient_clip_norm=2.0, scheduler_type='cosine', warmup_epochs=1, eta_min_ratio=0.1), data=DataConfig(graph_dir='data/processed/graphs', cache_dir='data/csr_cache', metadata_dir='data/processed/metadata', train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, num_workers=1, pin_memory=False, prefetch_factor=1, feature_selection_method='hybrid', variance_threshold=0.01, correlation_threshold=0.9, risk_norm_method='zscore_sigmoid', adaptive_binning=False), evaluation=EvaluationConfig(metrics=['auc', 'aupr', 'directional_hit_100', 'mttd_30s', 'risk_weighted_precision', 'risk_weighted_recall'], save_predictions=True, save_attention_weights=True, visualization=True, confidence_interval=True, statistical_test='bootstrap', n_bootstrap=1000), logging=LoggingConfig(log_level='INFO', log_dir='logs', enable_wandb=False, enable_tensorboard=False, wandb_project='riskniclp-5g', wandb_entity=None, log_system_metrics=True, system_metrics_interval=100, save_checkpoints=True, checkpoint_interval=500), security=SecurityConfig(enable_data_anonymization=True, hash_sensitive_fields=True, log_data_access=True, max_log_retention_days=30), phase2={'risk_bias_attention': {'enabled': True, 'method': 'simplified', 'beta_1': 1.2, 'beta_2': 1.2, 'temperature': 0.5}, 'negative_sampling': {'enabled': True, 'type': 'risk_aware', 'strategy': 'semantic', 'neg_ratio': 3, 'risk_thresholds': [0.8, 0.5, 0.2], 'hard_ratio': 0.3, 'seed': 42, 'attack_type_mapping': {'Benign': 0.0, 'ICMPFlood': 0.4, 'UDPFlood': 0.5, 'SYNFlood': 0.7, 'HTTPFlood': 0.8, 'SlowrateDoS': 0.9, 'TCPConnectScan': 0.8, 'SYNScan': 0.7, 'UDPScan': 0.6}, 'max_attempts_multiplier': 10, 'quality_threshold': 0.9, 'semantic_ratios': {'ue_flow_ratio': 0.4, 'flow_alert_ratio': 0.3, 'high_risk_ratio': 0.3}}, 'temporal_prediction': {'enabled': True, 'method': 'hetero_lstm', 'window_size': 5, 'stride': 1, 'future_steps': 3, 'lead_time_targets': [5, 10, 15], 'hetero_lstm': {'spatial_encoder_reuse': True, 'graph_aggregation': 'mean_pool', 'lstm_layers': 1, 'bidirectional': False}, 'tgat_risk': {'edge_level_modeling': True, 'risk_bias_temperature': 0.1, 'num_heads': 4, 'time_encoding_dim': 16}, 'graph_rnn': {'node_level_generation': True, 'rnn_type': 'GRU', 'message_passing_steps': 3}}, 'cross_scale_context': {'enabled': True, 'fusion_method': 'gate'}, 'training_enhancements': {'progressive': True, 'base_epochs': 20, 'risk_epochs': 30, 'scheduler': 'cosine', 'early_stopping': {'enabled': True, 'patience': 10, 'min_delta': 0.001}}}, seed=42, device='cpu', num_threads=8, experiment_name='riskniclp_baseline_20250701_095155', experiment_tags=[], notes='Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous node feature support')
+2025-07-01 09:51:55,368 - RiskNICLP-5G - INFO - train.py:623 - 🖥️ Device: cpu
+2025-07-01 09:51:55,368 - RiskNICLP-5G - INFO - train.py:624 - 🧵 Threads: 8
+2025-07-01 09:51:55,368 - RiskNICLP-5G - INFO - train.py:369 - 📊 Preparing data processing pipeline...
+2025-07-01 09:51:55,370 - RiskNICLP-5G - INFO - train.py:396 - 🎯 启用负采样策略: semantic, 负样本比例: 3:1
+2025-07-01 09:51:55,370 - RiskNICLP-5G - INFO - train.py:410 - 🚀 缓存配置: 边标签缓存=启用, 采样缓存=启用
+2025-07-01 09:51:55,370 - RiskNICLP-5G - INFO - train.py:415 -    📊 采样缓存配置: 大小限制=10.0GB, 压缩=启用
+2025-07-01 09:51:55,372 - RiskNICLP-5G - INFO - edge_label_cache.py:430 - 🚀 PositiveNegativeSampleCache初始化完成
+2025-07-01 09:51:55,372 - RiskNICLP-5G - INFO - edge_label_cache.py:431 -    📂 采样缓存目录: data/processed/sample_cache
+2025-07-01 09:51:55,372 - RiskNICLP-5G - INFO - edge_label_cache.py:432 -    💾 压缩存储: 启用
+2025-07-01 09:51:55,372 - RiskNICLP-5G - INFO - edge_label_cache.py:433 -    📊 缓存大小限制: 10.0GB
+2025-07-01 09:51:55,372 - RiskNICLP-5G - INFO - train.py:431 - 🔄 Fitting data processors...
+2025-07-01 09:51:55,374 - RiskNICLP-5G - INFO - train.py:442 - 📈 Data splits: Train=60, Val=7, Test=8
+2025-07-01 09:51:55,374 - RiskNICLP-5G - INFO - train.py:489 - 🏗️ Creating model architecture...
+2025-07-01 09:51:55,384 - RiskNICLP-5G - INFO - logger.py:139 - Step 0 - model/total_parameters: 146385.0000, model/trainable_parameters: 146385.0000, model/non_trainable_parameters: 0.0000
+2025-07-01 09:51:55,384 - RiskNICLP-5G - INFO - logger.py:204 - Model info: 146,385 total parameters, 146,385 trainable
+2025-07-01 09:51:55,384 - RiskNICLP-5G - INFO - train.py:519 - 🏃 Setting up progressive trainer...
+2025-07-01 09:51:55,384 - RiskNICLP-5G - INFO - train.py:529 - 🕐 Initializing temporal predictor: hetero_lstm
+2025-07-01 09:51:55,384 - RiskNICLP-5G - INFO - train.py:536 - ✅ Shared encoder passed to temporal predictor
+2025-07-01 09:51:55,386 - RiskNICLP-5G - INFO - train.py:549 - 🚀 Temporal predictor (hetero_lstm) initialized successfully
+2025-07-01 09:51:55,386 - RiskNICLP-5G - INFO - training.py:49 - 🔒 风险参数已冻结（在优化器创建前）
+2025-07-01 09:51:55,387 - RiskNICLP-5G - INFO - training.py:61 - 🎯 负采样平衡训练已启用: semantic, 负样本比例: 3:1
+2025-07-01 09:51:55,923 - RiskNICLP-5G - INFO - training.py:83 - ✅ 优化器创建：管理 70 个可训练参数
+2025-07-01 09:51:55,924 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 09:51:55,924 - RiskNICLP-5G - INFO - train.py:564 - 📊 Setting up evaluator...
+2025-07-01 09:51:55,924 - RiskNICLP-5G - INFO - train.py:649 - ℹ️ 当前阶段无可训练风险参数，跳过梯度钩子注册
+2025-07-01 09:51:55,924 - RiskNICLP-5G - INFO - train.py:656 - 🚀 Starting training...
+2025-07-01 09:51:55,924 - RiskNICLP-5G - INFO - training.py:157 - 🔍 验证训练状态...
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(basic): 6/6 冻结, 0/6 可训练
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=False, 值=0.20000000298023224
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=False, 值=0.20000000298023224
+2025-07-01 09:51:55,926 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:535 - ✅ Basic阶段：6个风险参数正确冻结
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:545 - ✅ Basic阶段：风险参数正确无梯度
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数已冻结，符合预期
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数无梯度（参数冻结）
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险机制暂未激活（参数冻结）
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Basic阶段: 0/6 参数可训练
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:599 - ✅ 正确：Basic阶段风险机制未激活（所有参数已冻结）
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:662 - ✅ Basic阶段风险偏置状态验证通过
+2025-07-01 09:51:55,927 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 09:51:55,928 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(basic): 6/6 冻结, 0/6 可训练
+2025-07-01 09:51:55,928 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 09:51:55,928 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=False, 值=0.20000000298023224
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=False, 值=[2.0, 2.0, 2.0, 2.0]
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=False, 值=0.20000000298023224
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:535 - ✅ Basic阶段：6个风险参数正确冻结
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:545 - ✅ Basic阶段：风险参数正确无梯度
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数已冻结，符合预期
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险参数无梯度（参数冻结）
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 09:51:55,929 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：Basic阶段风险机制暂未激活（参数冻结）
+2025-07-01 09:51:55,930 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Basic阶段: 0/6 参数可训练
+2025-07-01 09:51:55,930 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:599 - ✅ 正确：Basic阶段风险机制未激活（所有参数已冻结）
+2025-07-01 09:51:55,930 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:662 - ✅ Basic阶段风险偏置状态验证通过
+2025-07-01 09:51:55,930 - RiskNICLP-5G - INFO - training.py:542 - ✅ 训练状态正常: 风险参数 6, 可训练参数 146366/146385, LR=1.00e-03
+2025-07-01 09:51:55,931 - RiskNICLP-5G - INFO - training.py:1154 - 🔧 更新了 2 个风险偏置注意力层的训练阶段: basic
+2025-07-01 09:51:56,886 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9650, pos_weight=2.28, 正样本比例=42.6%, 负样本比例=57.4%
+2025-07-01 09:53:04,900 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9645, pos_weight=2.33, 正样本比例=42.5%, 负样本比例=57.5%
+2025-07-01 09:53:38,384 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 1 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 09:53:38,387 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第1次, 超时=180s)
+2025-07-01 09:53:39,218 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.8s)
+2025-07-01 09:53:39,218 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 1/10 [BASIC]: Train Loss: 0.9586, Val AUC: 0.5113, Phase: Basic GNN feature learning
+2025-07-01 09:53:39,220 - RiskNICLP-5G - INFO - training.py:886 - Checkpoint saved: best_model.pt
+2025-07-01 09:53:39,220 - RiskNICLP-5G - INFO - training.py:317 - 💾 New best model saved (AUC: 0.5113)
+2025-07-01 09:53:54,848 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9737, pos_weight=2.45, 正样本比例=38.1%, 负样本比例=61.9%
+2025-07-01 09:54:42,123 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9693, pos_weight=2.24, 正样本比例=39.5%, 负样本比例=60.5%
+2025-07-01 09:55:21,036 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 2 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 09:55:21,038 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第2次, 超时=180s)
+2025-07-01 09:55:21,900 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.9s)
+2025-07-01 09:55:21,901 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 2/10 [BASIC]: Train Loss: 0.9461, Val AUC: 0.5006, Phase: Basic GNN feature learning
+2025-07-01 09:55:22,803 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9534, pos_weight=2.22, 正样本比例=41.5%, 负样本比例=58.5%
+2025-07-01 09:56:09,350 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9310, pos_weight=2.38, 正样本比例=38.1%, 负样本比例=61.9%
+2025-07-01 09:57:03,668 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 3 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 09:57:03,694 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第3次, 超时=180s)
+2025-07-01 09:57:04,590 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.9s)
+2025-07-01 09:57:04,591 - RiskNICLP-5G - INFO - training.py:239 - 🔄 Advancing from basic to risk_aware phase (reason: epoch limit reached)
+2025-07-01 09:57:04,592 - RiskNICLP-5G - INFO - training.py:1154 - 🔧 更新了 2 个风险偏置注意力层的训练阶段: risk_aware
+2025-07-01 09:57:04,592 - RiskNICLP-5G - INFO - training.py:256 - 🔓 Risk parameters unfrozen for risk-aware phase
+2025-07-01 09:57:04,593 - RiskNICLP-5G - INFO - training.py:1111 - ✅ 优化器重新创建：现在管理 77 个参数（包含 7 个风险参数）
+2025-07-01 09:57:04,593 - RiskNICLP-5G - INFO - training.py:267 - ✅ 风险参数解冻验证成功: 7/7 参数已激活
+2025-07-01 09:57:04,594 - RiskNICLP-5G - INFO - training.py:274 - ✅ 优化器参数覆盖验证成功: 77/77
+2025-07-01 09:57:04,594 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 3/10 [RISK_AWARE]: Train Loss: 0.9417, Val AUC: 0.5117, Phase: Risk-aware attention training
+2025-07-01 09:57:04,595 - RiskNICLP-5G - INFO - training.py:886 - Checkpoint saved: best_model.pt
+2025-07-01 09:57:04,595 - RiskNICLP-5G - INFO - training.py:317 - 💾 New best model saved (AUC: 0.5117)
+2025-07-01 09:57:04,596 - RiskNICLP-5G - INFO - training.py:1154 - 🔧 更新了 2 个风险偏置注意力层的训练阶段: risk_aware
+2025-07-01 09:57:05,624 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9331, pos_weight=2.12, 正样本比例=43.3%, 负样本比例=56.7%
+2025-07-01 09:57:51,579 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.8530, pos_weight=2.40, 正样本比例=38.0%, 负样本比例=62.0%
+2025-07-01 09:57:51,580 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 09:57:51,583 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 09:57:51,584 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 09:57:51,584 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[2.000418186187744, 1.999735951423645, 1.9989315271377563, 1.9998735189437866], 梯度范数: 5.039757766667208e-08
+2025-07-01 09:57:51,584 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[1.9998629093170166, 2.0000884532928467, 2.0001585483551025, 2.000427007675171], 梯度范数: 1.5288921240141917e-09
+2025-07-01 09:57:51,584 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.19757482409477234, 梯度范数: 0.002928614616394043
+2025-07-01 09:57:51,584 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.002634286880493, 2.0023882389068604, 2.0010809898376465, 2.001037836074829], 梯度范数: 4.488523757117946e-07
+2025-07-01 09:57:51,584 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[1.9999001026153564, 2.0001120567321777, 1.9999102354049683, 1.9999268054962158], 梯度范数: 3.017969207874671e-10
+2025-07-01 09:57:51,585 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.19722850620746613, 梯度范数: 0.0016696513630449772
+2025-07-01 09:57:51,585 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 09:57:51,585 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：3个参数有有效梯度
+2025-07-01 09:57:51,585 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 09:57:51,585 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.000766, 最大=0.002929, 健康评分=0.500
+2025-07-01 09:57:51,585 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 09:57:51,586 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 09:57:51,586 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 09:57:51,586 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 09:57:51,586 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 09:57:51,586 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 09:57:51,586 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 09:58:35,157 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 4 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 09:58:35,166 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第4次, 超时=180s)
+2025-07-01 09:58:36,036 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.9s)
+2025-07-01 09:58:36,037 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 4/10 [RISK_AWARE]: Train Loss: 0.9463, Val AUC: 0.5104, Phase: Risk-aware attention training
+2025-07-01 09:58:38,151 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9675, pos_weight=2.33, 正样本比例=41.7%, 负样本比例=58.3%
+2025-07-01 09:59:50,064 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9488, pos_weight=2.19, 正样本比例=42.0%, 负样本比例=58.0%
+2025-07-01 09:59:50,065 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 09:59:50,067 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 09:59:50,068 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 09:59:50,068 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[1.9988019466400146, 1.9959322214126587, 1.9968717098236084, 1.9983969926834106], 梯度范数: 6.575941569053612e-08
+2025-07-01 09:59:50,068 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[1.9992214441299438, 1.9997297525405884, 2.0003230571746826, 2.0012123584747314], 梯度范数: 7.028421178389976e-10
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.197463721036911, 梯度范数: 3.041699528694153e-06
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.000657558441162, 2.003589630126953, 2.001892328262329, 2.0014896392822266], 梯度范数: 4.032300694234436e-06
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[2.0000574588775635, 2.0001940727233887, 1.9999172687530518, 2.000436782836914], 梯度范数: 4.2537290356747803e-10
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.19824355840682983, 梯度范数: 0.0005170977674424648
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：3个参数有有效梯度
+2025-07-01 09:59:50,069 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.000087, 最大=0.000517, 健康评分=0.500
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 09:59:50,070 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 09:59:50,071 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 10:00:28,927 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 5 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 10:00:28,950 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第5次, 超时=180s)
+2025-07-01 10:00:29,884 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.9s)
+2025-07-01 10:00:29,885 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 5/10 [RISK_AWARE]: Train Loss: 0.9415, Val AUC: 0.5094, Phase: Risk-aware attention training
+2025-07-01 10:00:31,587 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9390, pos_weight=2.12, 正样本比例=40.1%, 负样本比例=59.9%
+2025-07-01 10:01:51,955 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9495, pos_weight=2.05, 正样本比例=40.1%, 负样本比例=59.9%
+2025-07-01 10:01:51,956 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 10:01:51,958 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 10:01:51,958 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 10:01:51,958 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[1.9968475103378296, 1.9978647232055664, 1.9968321323394775, 1.995498538017273], 梯度范数: 5.421014520834433e-06
+2025-07-01 10:01:51,958 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[1.9986907243728638, 1.9996349811553955, 2.001312017440796, 2.0021536350250244], 梯度范数: 6.27173557532501e-09
+2025-07-01 10:01:51,958 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.19340139627456665, 梯度范数: 0.002082452178001404
+2025-07-01 10:01:51,958 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.0001111030578613, 2.0027127265930176, 2.0001468658447266, 2.0064938068389893], 梯度范数: 8.871084560269082e-07
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[2.0007336139678955, 2.0002081394195557, 1.99969482421875, 1.9992107152938843], 梯度范数: 1.1461016580227579e-09
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.1951397955417633, 梯度范数: 3.743917034171318e-07
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：4个参数有有效梯度
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.000348, 最大=0.002082, 健康评分=0.667
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 10:01:51,959 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 10:01:51,960 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 10:02:23,228 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 6 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 10:02:23,245 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第6次, 超时=180s)
+2025-07-01 10:02:24,203 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (1.0s)
+2025-07-01 10:02:24,204 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 6/10 [RISK_AWARE]: Train Loss: 0.9277, Val AUC: 0.5097, Phase: Risk-aware attention training
+2025-07-01 10:02:25,876 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.8810, pos_weight=2.13, 正样本比例=43.3%, 负样本比例=56.7%
+2025-07-01 10:03:48,739 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9813, pos_weight=2.15, 正样本比例=40.9%, 负样本比例=59.1%
+2025-07-01 10:03:48,740 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 10:03:48,742 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 10:03:48,742 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 10:03:48,742 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[1.9946367740631104, 2.000678062438965, 1.9999666213989258, 1.998142957687378], 梯度范数: 9.395373012921482e-07
+2025-07-01 10:03:48,743 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[1.9984394311904907, 2.0001423358917236, 2.0008773803710938, 2.0005431175231934], 梯度范数: 1.1685685308293614e-08
+2025-07-01 10:03:48,743 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.19950474798679352, 梯度范数: 0.007542341947555542
+2025-07-01 10:03:48,743 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.0028154850006104, 1.9983432292938232, 2.0050718784332275, 2.0045909881591797], 梯度范数: 3.008818566740956e-05
+2025-07-01 10:03:48,743 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[2.002535343170166, 1.9993525743484497, 1.9996904134750366, 1.9988117218017578], 梯度范数: 1.3984921665155525e-08
+2025-07-01 10:03:48,743 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.18894927203655243, 梯度范数: 0.005388766527175903
+2025-07-01 10:03:48,744 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 10:03:48,744 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：4个参数有有效梯度
+2025-07-01 10:03:48,744 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 10:03:48,744 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.002160, 最大=0.007542, 健康评分=0.667
+2025-07-01 10:03:48,744 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 10:03:48,744 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 10:03:48,745 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 10:03:48,745 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 10:03:48,745 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 10:03:48,745 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 10:03:48,745 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 10:04:05,556 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 7 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 10:04:05,570 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第7次, 超时=180s)
+2025-07-01 10:04:06,560 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (1.0s)
+2025-07-01 10:04:06,561 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 7/10 [RISK_AWARE]: Train Loss: 0.8966, Val AUC: 0.5166, Phase: Risk-aware attention training
+2025-07-01 10:04:06,563 - RiskNICLP-5G - INFO - training.py:886 - Checkpoint saved: best_model.pt
+2025-07-01 10:04:06,563 - RiskNICLP-5G - INFO - training.py:317 - 💾 New best model saved (AUC: 0.5166)
+2025-07-01 10:04:07,644 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9425, pos_weight=2.17, 正样本比例=41.6%, 负样本比例=58.4%
+2025-07-01 10:05:41,338 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.6121, pos_weight=2.40, 正样本比例=38.1%, 负样本比例=61.9%
+2025-07-01 10:05:41,339 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 10:05:41,341 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 10:05:41,341 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 10:05:41,341 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[1.993323564529419, 2.0024049282073975, 2.0006906986236572, 2.001296043395996], 梯度范数: 7.294566444215889e-07
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[2.0002806186676025, 2.0003561973571777, 2.0015037059783936, 1.998880386352539], 梯度范数: 6.694408360985449e-10
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.2027752697467804, 梯度范数: 0.015616655349731445
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.0089197158813477, 1.9924662113189697, 2.0073649883270264, 2.0028302669525146], 梯度范数: 0.003924105782061815
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[2.004500150680542, 1.9970588684082031, 1.9989827871322632, 1.9977672100067139], 梯度范数: 2.9433228077024864e-10
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.18455827236175537, 梯度范数: 0.007594145834445953
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：4个参数有有效梯度
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.004523, 最大=0.015617, 健康评分=0.667
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 10:05:41,342 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 10:05:41,343 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 10:05:41,343 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 10:05:41,343 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 10:05:41,343 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 10:05:41,343 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 10:05:43,456 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 8 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 10:05:43,461 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第8次, 超时=180s)
+2025-07-01 10:05:44,324 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.9s)
+2025-07-01 10:05:44,324 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 8/10 [RISK_AWARE]: Train Loss: 0.9167, Val AUC: 0.5219, Phase: Risk-aware attention training
+2025-07-01 10:05:44,326 - RiskNICLP-5G - INFO - training.py:886 - Checkpoint saved: best_model.pt
+2025-07-01 10:05:44,326 - RiskNICLP-5G - INFO - training.py:317 - 💾 New best model saved (AUC: 0.5219)
+2025-07-01 10:05:46,450 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.9386, pos_weight=2.15, 正样本比例=40.0%, 负样本比例=60.0%
+2025-07-01 10:06:42,146 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9693, pos_weight=2.24, 正样本比例=41.5%, 负样本比例=58.5%
+2025-07-01 10:06:42,147 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 10:06:42,149 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 10:06:42,149 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 10:06:42,150 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[1.9886163473129272, 2.003466844558716, 2.0007121562957764, 2.0042977333068848], 梯度范数: 1.0313268461459302e-07
+2025-07-01 10:06:42,150 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[2.0030252933502197, 2.0014281272888184, 2.0057199001312256, 1.9961280822753906], 梯度范数: 4.0851277915976425e-09
+2025-07-01 10:06:42,150 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.20180094242095947, 梯度范数: 0.003998249769210815
+2025-07-01 10:06:42,150 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.0136208534240723, 1.983802318572998, 2.008803367614746, 2.0086746215820312], 梯度范数: 1.0418032161396695e-06
+2025-07-01 10:06:42,150 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[2.0091023445129395, 1.9922218322753906, 1.9998294115066528, 1.994354009628296], 梯度范数: 4.5262216197272664e-09
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.17948445677757263, 梯度范数: 0.00013422220945358276
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：4个参数有有效梯度
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.000689, 最大=0.003998, 健康评分=0.667
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 10:06:42,151 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 10:06:42,152 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 10:06:42,152 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 10:06:42,152 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 10:06:42,152 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 10:06:42,153 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 10:07:41,524 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 9 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 10:07:41,526 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第9次, 超时=180s)
+2025-07-01 10:07:42,344 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.8s)
+2025-07-01 10:07:42,344 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 9/10 [RISK_AWARE]: Train Loss: 0.8977, Val AUC: 0.5257, Phase: Risk-aware attention training
+2025-07-01 10:07:42,346 - RiskNICLP-5G - INFO - training.py:886 - Checkpoint saved: best_model.pt
+2025-07-01 10:07:42,346 - RiskNICLP-5G - INFO - training.py:317 - 💾 New best model saved (AUC: 0.5257)
+2025-07-01 10:08:21,971 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 0: Loss=0.8529, pos_weight=2.44, 正样本比例=38.1%, 负样本比例=61.9%
+2025-07-01 10:08:51,397 - RiskNICLP-5G - INFO - training.py:775 - 📊 Batch 10: Loss=0.9218, pos_weight=2.12, 正样本比例=40.7%, 负样本比例=59.3%
+2025-07-01 10:08:51,398 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:32 - 🔧 RiskBiasIntelligentDiagnostic初始化 - 修复版
+2025-07-01 10:08:51,401 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:521 - 🔍 风险参数状态(risk_aware): 0/6 冻结, 6/6 可训练
+2025-07-01 10:08:51,401 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:525 - 📊 详细参数信息:
+2025-07-01 10:08:51,401 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_src: requires_grad=True, 值=[1.9860179424285889, 2.003178119659424, 2.000533103942871, 2.0030181407928467], 梯度范数: 3.9517939853794815e-07
+2025-07-01 10:08:51,401 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].beta_dst: requires_grad=True, 值=[2.004133462905884, 1.9967046976089478, 2.0103867053985596, 1.990505576133728], 梯度范数: 2.5298496630909995e-09
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[0].temperature: requires_grad=True, 值=0.2003495693206787, 梯度范数: 0.00327514111995697
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_src: requires_grad=True, 值=[2.0167341232299805, 1.975685715675354, 2.007779121398926, 2.0087974071502686], 梯度范数: 1.0935488717223052e-05
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].beta_dst: requires_grad=True, 值=[2.0094339847564697, 1.9856270551681519, 1.9996275901794434, 1.9860605001449585], 梯度范数: 1.140626149087609e-09
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:528 -   risk_bias_layers[1].temperature: requires_grad=True, 值=0.17626935243606567, 梯度范数: 0.003603041172027588
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:551 - ✅ Risk_Aware阶段：6个风险参数正确解冻
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:558 - ✅ Risk_Aware阶段：4个参数有有效梯度
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:564 - ✅ 训练阶段与参数状态正确对齐
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:571 - 📊 梯度统计: 平均=0.001148, 最大=0.003603, 健康评分=0.667
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数已解冻，符合Risk-aware阶段预期
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险参数梯度健康
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：训练阶段与参数状态对齐
+2025-07-01 10:08:51,402 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:584 - ✅ 正常：风险机制已激活
+2025-07-01 10:08:51,403 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:595 - 🔧 风险机制状态: Risk-aware阶段: 6/6 参数可训练, 值变化: True
+2025-07-01 10:08:51,403 - RiskNICLP-5G - INFO - risk_bias_diagnostic.py:604 - ✅ 正确：Risk_Aware阶段风险机制已激活（6个参数可训练）
+2025-07-01 10:08:51,403 - RiskNICLP-5G - INFO - training.py:813 - ✅ RISK_AWARE阶段风险偏置诊断完成（Batch 10）
+2025-07-01 10:09:30,164 - RiskNICLP-5G - INFO - training.py:839 - 📊 Epoch 10 样本分布: 正样本 1527036 (29.4%), 负样本 3670484 (70.6%)
+2025-07-01 10:09:30,168 - RiskNICLP-5G - INFO - intelligent_validator.py:62 - 🔍 智能验证开始 (第10次, 超时=180s)
+2025-07-01 10:09:30,946 - RiskNICLP-5G - INFO - intelligent_validator.py:70 - ✅ 标准验证完成 (0.8s)
+2025-07-01 10:09:30,947 - RiskNICLP-5G - INFO - training.py:239 - 🔄 Advancing from risk_aware to full_fusion phase (reason: epoch limit reached)
+2025-07-01 10:09:30,948 - RiskNICLP-5G - INFO - training.py:1154 - 🔧 更新了 2 个风险偏置注意力层的训练阶段: full_fusion
+2025-07-01 10:09:30,948 - RiskNICLP-5G - INFO - training.py:295 - 🚀 Full fusion phase activated
+2025-07-01 10:09:30,948 - RiskNICLP-5G - INFO - training.py:305 - 📊 Epoch 10/10 [FULL_FUSION]: Train Loss: 0.9183, Val AUC: 0.5313, Phase: Complete model optimization
+2025-07-01 10:09:30,949 - RiskNICLP-5G - INFO - training.py:886 - Checkpoint saved: best_model.pt
+2025-07-01 10:09:30,950 - RiskNICLP-5G - INFO - training.py:317 - 💾 New best model saved (AUC: 0.5313)
+2025-07-01 10:09:30,950 - RiskNICLP-5G - INFO - training.py:320 - ✅ Progressive training completed. Best AUC: 0.5313
+2025-07-01 10:09:30,950 - RiskNICLP-5G - INFO - train.py:686 - 🎯 Running final evaluation...
+2025-07-01 10:09:30,950 - RiskNICLP-5G - INFO - evaluator.py:61 - 🎯 Starting evaluation on test set...
+2025-07-01 10:09:32,333 - RiskNICLP-5G - INFO - evaluator.py:243 - 🔄 负采样效果: 平衡度 0.729, 质量 0.000, 分离度 -1.000, 综合评分 0.319
+2025-07-01 10:09:32,333 - RiskNICLP-5G - INFO - evaluator.py:525 - 📊 Evaluation Results for test:
+2025-07-01 10:09:32,333 - RiskNICLP-5G - INFO - evaluator.py:530 - 🚨 P0 - Real-time Security:
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:532 -   lead_time_mean: 1.9392
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:532 -   lead_time_std: 1.7079
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:532 -   mttd_30s: 6.9259
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:537 - 🎯 P1 - Detection Quality:
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:539 -   risk_weighted_precision: 0.3527
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:539 -   risk_weighted_recall: 0.3369
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:539 -   aupr: 0.3880
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:544 - 📍 P2 - Directional Accuracy:
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:546 -   directional_hit_100: 1.0000
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:546 -   direction_error_rate: 0.0000
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:551 - 📈 P3 - Traditional Metrics:
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:553 -   auc: 0.4576
+2025-07-01 10:09:32,334 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_10: 0.5000
+2025-07-01 10:09:32,335 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_50: 0.3600
+2025-07-01 10:09:32,335 - RiskNICLP-5G - INFO - evaluator.py:553 -   hit_100: 0.3000
+2025-07-01 10:09:32,335 - RiskNICLP-5G - INFO - evaluator.py:599 - 💾 Evaluation results saved to logs/evaluation_test.json
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:693 - 📊 Test Results:
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p0_lead_time_mean: 1.9392
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p0_lead_time_std: 1.7079
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p0_mttd_30s: 6.9259
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p1_risk_weighted_precision: 0.3527
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p1_risk_weighted_recall: 0.3369
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p1_aupr: 0.3880
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p2_directional_hit_100: 1.0000
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p2_direction_error_rate: 0.0000
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p3_auc: 0.4576
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p3_hit_10: 0.5000
+2025-07-01 10:09:32,337 - RiskNICLP-5G - INFO - train.py:695 -   p3_hit_50: 0.3600
+2025-07-01 10:09:32,338 - RiskNICLP-5G - INFO - train.py:695 -   p3_hit_100: 0.3000
+2025-07-01 10:09:32,338 - RiskNICLP-5G - INFO - train.py:695 -   ns_sampling_balance_ratio: 0.7292
+2025-07-01 10:09:32,338 - RiskNICLP-5G - INFO - train.py:695 -   ns_negative_sample_quality: 0.0000
+2025-07-01 10:09:32,338 - RiskNICLP-5G - INFO - train.py:695 -   ns_positive_negative_separation: -1.0000
+2025-07-01 10:09:32,338 - RiskNICLP-5G - INFO - train.py:695 -   ns_sampling_diversity_score: 1.0000
+2025-07-01 10:09:32,338 - RiskNICLP-5G - INFO - train.py:695 -   ns_overall_negative_sampling_score: 0.3188
+2025-07-01 10:09:32,344 - RiskNICLP-5G - INFO - train.py:701 - 💾 Model saved to: logs/riskniclp_baseline_20250701_095155/final_model.pt
+2025-07-01 10:09:32,344 - RiskNICLP-5G - INFO - train.py:703 - ✅ Training completed successfully!
+2025-07-01 10:09:33,311 - RiskNICLP-5G - INFO - logger.py:226 - Logger cleanup completed

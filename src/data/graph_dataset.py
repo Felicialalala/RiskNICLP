@@ -11,13 +11,24 @@ from pathlib import Path
 import dgl
 import numpy as np
 from .negative_sampler import BaselineNegativeSampler, RiskAwareNegativeSampler, create_negative_sampler
-from .edge_label_cache import EdgeLabelCache
+from .edge_label_cache import EdgeLabelCache, PositiveNegativeSampleCache
 
 
 class RiskNICLPDataset(Dataset):
     """RiskNICLP-5G Dataset class"""
     
-    def __init__(self, graph_dir: str, metadata_dir: str, feature_processor, risk_vectorizer, cache_manager=None, negative_sampler_config=None, enable_edge_label_cache: bool = True):
+    def __init__(
+        self, 
+        graph_dir: str, 
+        metadata_dir: str, 
+        feature_processor, 
+        risk_vectorizer, 
+        cache_manager=None, 
+        negative_sampler_config=None, 
+        enable_edge_label_cache: bool = True,
+        enable_sample_cache: bool = True,
+        sample_cache_config: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize dataset
         
@@ -29,6 +40,8 @@ class RiskNICLPDataset(Dataset):
             cache_manager: Cache manager (optional)
             negative_sampler_config: Configuration for negative sampling
             enable_edge_label_cache: Enable edge label caching for faster training
+            enable_sample_cache: Enable positive/negative sample caching
+            sample_cache_config: Configuration for sample caching
         """
         self.graph_dir = graph_dir
         self.metadata_dir = metadata_dir
@@ -43,23 +56,50 @@ class RiskNICLPDataset(Dataset):
         self.negative_sampler = create_negative_sampler(negative_sampler_config)
         self.negative_sampler_config = negative_sampler_config
         
-        # 🚀 Initialize edge label cache system
+        # 🚀 Initialize enhanced cache system (edge labels + positive/negative samples)
         self.enable_edge_label_cache = enable_edge_label_cache
-        if enable_edge_label_cache:
+        self.enable_sample_cache = enable_sample_cache
+        
+        # Default sample cache configuration
+        default_sample_cache_config = {
+            'max_cache_size_gb': 10.0,
+            'compression_enabled': True
+        }
+        if sample_cache_config is None:
+            sample_cache_config = default_sample_cache_config
+        else:
+            sample_cache_config = {**default_sample_cache_config, **sample_cache_config}
+        
+        if enable_edge_label_cache or enable_sample_cache:
             cache_dir = Path(graph_dir).parent / "edge_label_cache"
-            self.edge_label_cache = EdgeLabelCache(
+            sample_cache_dir = Path(graph_dir).parent / "sample_cache"
+            
+            # Use enhanced cache system
+            self.sample_cache = PositiveNegativeSampleCache(
                 cache_dir=str(cache_dir),
+                sample_cache_dir=str(sample_cache_dir),
                 semantic_config={
                     'triggers': {'pos_ratio': 0.8, 'desc': 'Flow->Alert高风险传播'},
                     'initiates': {'pos_ratio': 0.4, 'desc': 'UE->Flow中风险发起'},
                     'temporal_adj': {'pos_ratio': 0.15, 'desc': 'Flow->Flow时序关联'},
                     'default': {'pos_ratio': 0.1, 'desc': '其他边类型'}
-                }
+                },
+                max_cache_size_gb=sample_cache_config['max_cache_size_gb'],
+                compression_enabled=sample_cache_config['compression_enabled']
             )
-            print(f"🚀 边标签缓存已启用: {cache_dir}")
+            
+            # For backward compatibility, also set edge_label_cache
+            self.edge_label_cache = self.sample_cache
+            
+            print(f"🚀 增强缓存系统已启用:")
+            print(f"   📂 边标签缓存: {cache_dir} ({'启用' if enable_edge_label_cache else '禁用'})")
+            print(f"   📂 采样结果缓存: {sample_cache_dir} ({'启用' if enable_sample_cache else '禁用'})")
+            print(f"   💾 压缩存储: {'启用' if sample_cache_config['compression_enabled'] else '禁用'}")
+            print(f"   📊 缓存大小限制: {sample_cache_config['max_cache_size_gb']}GB")
         else:
+            self.sample_cache = None
             self.edge_label_cache = None
-            print("⚠️ 边标签缓存已禁用")
+            print("⚠️ 所有缓存已禁用")
         
         # Initialize data storage
         self.graph_files = None
@@ -138,14 +178,15 @@ class RiskNICLPDataset(Dataset):
     
     def _generate_positive_negative_edges(self, graph, edge_labels, risk_scores, graph_file=None):
         """
-        Extract positive and negative edge samples based on authoritative edge labels
+        Extract positive and negative edge samples with enhanced caching
         
-        🔧 修复：完全使用传入的edge_labels，不再重新生成标签
+        🚀 增强版本：支持正负采样结果缓存，大幅提升训练启动速度
         
         Args:
             graph: DGL graph
             edge_labels: Authoritative edge labels from __getitem__ (权威边标签)
             risk_scores: Node risk scores (for negative sampling only)
+            graph_file: Graph file path for caching
             
         Returns:
             Tuple of (positive_edges, negative_edges)
@@ -154,6 +195,31 @@ class RiskNICLPDataset(Dataset):
         num_edges = graph.number_of_edges()
         if len(edge_labels) != num_edges:
             raise ValueError(f"❌ edge_labels长度{len(edge_labels)}与图边数{num_edges}不匹配")
+        
+        # 🚀 优先使用增强缓存系统 (正负采样结果缓存)
+        if self.enable_sample_cache and self.sample_cache is not None and graph_file is not None:
+            try:
+                positive_edges, negative_edges = self.sample_cache.get_or_generate_samples(
+                    graph=graph,
+                    edge_labels=edge_labels,
+                    risk_scores=risk_scores,
+                    negative_sampler=self.negative_sampler,
+                    graph_file=graph_file
+                )
+                
+                from pathlib import Path
+                print(f"🚀 采样缓存生效: 文件={Path(graph_file).name}, "
+                      f"正边={len(positive_edges)}, 负边={len(negative_edges)}, "
+                      f"比例=1:{len(negative_edges)/max(len(positive_edges), 1):.1f}")
+                
+                return positive_edges, negative_edges
+                
+            except Exception as e:
+                print(f"⚠️ 采样缓存失败，回退到实时生成: {e}")
+                # 继续到实时生成逻辑
+        
+        # 🔧 实时生成逻辑（缓存未启用或失败时使用）
+        print(f"🔄 实时生成正负采样结果: 缓存={'未启用' if not self.enable_sample_cache else '失败'}")
         
         # Extract all edges from graph
         if graph.is_homogeneous:
@@ -185,15 +251,18 @@ class RiskNICLPDataset(Dataset):
                   f"正边={len(positive_edges)}/{len(all_edges)} ({len(positive_edges)/len(all_edges)*100:.1f}%)")
         else:
             positive_edges = torch.empty((0, 2), dtype=torch.long)
+            print(f"⚠️ 无法提取正样本边: edge_labels长度={len(edge_labels)}, all_edges长度={len(all_edges)}")
         
         # Generate negative edges using sampler
         if len(positive_edges) > 0:
+            print(f"🔄 开始实时负采样: 正样本={len(positive_edges)}, 负采样器类型={type(self.negative_sampler).__name__}")
             try:
                 negative_edges = self.negative_sampler.sample_negatives(
                     graph, positive_edges, risk_scores
                 )
+                print(f"✅ 实时负采样完成: 生成负样本={len(negative_edges)}, 比例=1:{len(negative_edges)/len(positive_edges):.1f}")
             except Exception as e:
-                print(f"Warning: Negative sampling failed: {e}. Using fallback.")
+                print(f"❌ 负采样失败: {e}. 使用兜底方法.")
                 # Fallback to simple negative sampling
                 num_neg = len(positive_edges) * self.negative_sampler_config.get('neg_ratio', 3)
                 num_nodes = graph.number_of_nodes()
@@ -218,8 +287,10 @@ class RiskNICLPDataset(Dataset):
                     attempts += 1
                 
                 negative_edges = torch.tensor(neg_edges, dtype=torch.long) if neg_edges else torch.empty((0, 2), dtype=torch.long)
+                print(f"🔧 兜底负采样: 生成负样本={len(negative_edges)}")
         else:
             negative_edges = torch.empty((0, 2), dtype=torch.long)
+            print(f"⚠️ 跳过负采样: 没有正样本边")
             
         return positive_edges, negative_edges
         

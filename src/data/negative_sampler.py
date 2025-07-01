@@ -182,25 +182,24 @@ class RiskAwareNegativeSampler:
         }
         
     def _calculate_adaptive_neg_ratio(self, positive_edges: torch.Tensor, graph: dgl.DGLGraph) -> int:
-        """🔧 自适应负采样比例计算，基于正样本数量和图规模"""
+        """🔧 修复自适应负采样比例计算，严格遵循配置比例"""
         num_pos_edges = positive_edges.shape[0]
         num_nodes = graph.number_of_nodes()
         
         if num_pos_edges == 0:
-            return min(self.neg_ratio, 1)  # 无正样本时使用最小比例
+            return self.neg_ratio  # 修复：即使无正样本也使用配置比例
         
-        # 动态调整策略：正样本少时增加负样本，正样本多时减少负样本
-        if num_pos_edges < 50:
-            # 正样本极少：增加负样本比例，但限制总数
-            adaptive_ratio = min(self.neg_ratio + 2, 5)
-            max_neg_samples = min(adaptive_ratio * num_pos_edges, 3000)
-            final_ratio = max_neg_samples // num_pos_edges if num_pos_edges > 0 else 3
-        elif num_pos_edges < 200:
-            # 正样本较少：标准比例
-            final_ratio = self.neg_ratio
+        # 🔧 修复：移除错误的比例减少逻辑，严格遵循配置
+        # 只在极端情况下微调，保持接近配置值
+        if num_pos_edges < 10:
+            # 正样本极少：适度增加负样本比例避免过拟合
+            final_ratio = min(self.neg_ratio + 1, self.neg_ratio + 2)
+        elif num_pos_edges > 500000:
+            # 正样本过多：计算资源限制，适度减少但不低于配置值
+            final_ratio = max(self.neg_ratio - 1, self.neg_ratio)
         else:
-            # 正样本充足：可以减少负样本比例
-            final_ratio = max(self.neg_ratio - 1, 2)
+            # 🔥 关键修复：正常情况严格使用配置比例
+            final_ratio = self.neg_ratio
         
         return final_ratio
     
@@ -221,6 +220,11 @@ class RiskAwareNegativeSampler:
         Returns:
             negative_edges: 负样本边 [num_neg_edges, 2]
         """
+        # 🔥 新增：负采样开始日志
+        num_pos_edges = len(positive_edges)
+        target_neg_edges = num_pos_edges * self.neg_ratio
+        print(f"🔄 负采样开始: 策略={self.strategy}, 正样本={num_pos_edges}, 目标负样本={target_neg_edges}")
+        
         # 1. 类型检查 - 确保risk_scores是torch.Tensor
         if not torch.is_tensor(risk_scores):
             raise TypeError(
@@ -245,6 +249,10 @@ class RiskAwareNegativeSampler:
         original_neg_ratio = self.neg_ratio
         self.neg_ratio = self._calculate_adaptive_neg_ratio(positive_edges, graph)
         
+        # 🔥 新增：显示自适应调整结果
+        if self.neg_ratio != original_neg_ratio:
+            print(f"   📊 自适应调整: 负样本比例 {original_neg_ratio}:1 → {self.neg_ratio}:1")
+        
         # 4. 策略存在性检查
         if self.strategy not in self._sampling_strategies:
             raise ValueError(f"未知的采样策略: {self.strategy}")
@@ -252,6 +260,26 @@ class RiskAwareNegativeSampler:
         try:
             sampling_func = self._sampling_strategies[self.strategy]
             result = sampling_func(graph, positive_edges, risk_scores)
+            
+            # 🔥 新增：负采样成功日志
+            actual_neg_edges = len(result)
+            success_ratio = actual_neg_edges / target_neg_edges if target_neg_edges > 0 else 0
+            print(f"✅ 负采样完成: 实际生成={actual_neg_edges}, 成功率={success_ratio:.1%}, 最终比例=1:{actual_neg_edges/num_pos_edges:.1f}")
+            
+            # 🔥 风险分布统计
+            if len(result) > 0:
+                try:
+                    src_risks = risk_scores[result[:, 0]]
+                    dst_risks = risk_scores[result[:, 1]]
+                    avg_neg_risk = torch.mean(src_risks + dst_risks).item()
+                    high_risk_neg_ratio = ((src_risks > 0.7) | (dst_risks > 0.7)).float().mean().item()
+                    print(f"   📈 负样本风险统计: 平均风险={avg_neg_risk:.3f}, 高风险边比例={high_risk_neg_ratio:.1%}")
+                except:
+                    pass  # 风险统计失败不影响主流程
+            
+        except Exception as e:
+            print(f"❌ 负采样失败: {e}")
+            raise
         finally:
             # 恢复原始neg_ratio
             self.neg_ratio = original_neg_ratio
@@ -825,14 +853,19 @@ class RiskAwareNegativeSampler:
         positive_edge_set: set,
         risk_scores: torch.Tensor
     ) -> List[List[int]]:
-        """快速跨类型边采样 - 避免复杂的加权采样"""
+        """快速跨类型边采样 - 大图分块处理"""
         negative_edges = []
         
         if len(src_nodes) == 0 or len(dst_nodes) == 0 or num_samples == 0:
             return negative_edges
         
-        # 限制尝试次数避免无限循环
-        max_attempts = min(num_samples * 5, 10000)  # 大幅降低最大尝试次数
+        # 🔥 修复1: 大图分块采样策略
+        if num_samples > 50000:  # 大图检测阈值
+            print(f"🔧 检测到大图采样需求: {num_samples} 负样本，启用分块采样")
+            return self._chunked_large_graph_sampling(src_nodes, dst_nodes, num_samples, positive_edge_set, risk_scores)
+        
+        # 🔥 修复2: 动态最大尝试次数
+        max_attempts = min(num_samples * 20, 200000)  # 从10000提升至20万
         attempts = 0
         
         # 安全索引访问
@@ -896,6 +929,87 @@ class RiskAwareNegativeSampler:
             
         return negative_edges
     
+    def _chunked_large_graph_sampling(
+        self, 
+        src_nodes: List[int], 
+        dst_nodes: List[int],
+        num_samples: int, 
+        positive_edge_set: set,
+        risk_scores: torch.Tensor
+    ) -> List[List[int]]:
+        """🔥 大图分块采样 - 解决大图负采样失败问题"""
+        negative_edges = []
+        chunk_size = 10000  # 每块最多1万负样本
+        
+        print(f"🔄 大图分块采样开始: 目标={num_samples}, 块大小={chunk_size}")
+        
+        # 安全索引访问
+        max_idx = len(risk_scores) - 1
+        valid_src_nodes = [n for n in src_nodes if 0 <= n <= max_idx]
+        valid_dst_nodes = [n for n in dst_nodes if 0 <= n <= max_idx]
+        
+        if not valid_src_nodes or not valid_dst_nodes:
+            print(f"❌ 无有效节点: src={len(valid_src_nodes)}, dst={len(valid_dst_nodes)}")
+            return negative_edges
+        
+        # 预先计算高风险节点（减少重复计算）
+        try:
+            src_risks = risk_scores[torch.tensor(valid_src_nodes)]
+            dst_risks = risk_scores[torch.tensor(valid_dst_nodes)]
+            
+            # 取前30%高风险节点（提高成功率）
+            src_top_k = max(10, len(valid_src_nodes) // 3)
+            dst_top_k = max(10, len(valid_dst_nodes) // 3)
+            
+            src_sorted_indices = torch.argsort(src_risks, descending=True)[:src_top_k]
+            dst_sorted_indices = torch.argsort(dst_risks, descending=True)[:dst_top_k]
+            
+            high_risk_src_nodes = [valid_src_nodes[i] for i in src_sorted_indices]
+            high_risk_dst_nodes = [valid_dst_nodes[i] for i in dst_sorted_indices]
+            
+            print(f"📊 高风险节点池: src={len(high_risk_src_nodes)}, dst={len(high_risk_dst_nodes)}")
+        except:
+            high_risk_src_nodes = valid_src_nodes
+            high_risk_dst_nodes = valid_dst_nodes
+        
+        # 分块生成
+        remaining_samples = num_samples
+        chunk_count = 0
+        
+        while remaining_samples > 0 and chunk_count < 100:  # 最多100块
+            current_chunk_size = min(chunk_size, remaining_samples)
+            chunk_edges = []
+            
+            # 高效随机采样：预生成索引
+            max_chunk_attempts = current_chunk_size * 3  # 降低尝试比例
+            
+            for _ in range(max_chunk_attempts):
+                if len(chunk_edges) >= current_chunk_size:
+                    break
+                
+                try:
+                    src_node = random.choice(high_risk_src_nodes)
+                    dst_node = random.choice(high_risk_dst_nodes)
+                    
+                    if (src_node != dst_node and 
+                        (src_node, dst_node) not in positive_edge_set and
+                        [src_node, dst_node] not in chunk_edges):
+                        chunk_edges.append([src_node, dst_node])
+                except:
+                    continue
+            
+            negative_edges.extend(chunk_edges)
+            remaining_samples -= len(chunk_edges)
+            chunk_count += 1
+            
+            if chunk_count % 10 == 0:  # 每10块输出进度
+                print(f"   📊 进度: 已生成 {len(negative_edges)}/{num_samples} ({len(negative_edges)/num_samples*100:.1f}%)")
+        
+        success_rate = len(negative_edges) / num_samples if num_samples > 0 else 0
+        print(f"✅ 大图分块采样完成: 生成 {len(negative_edges)}/{num_samples} ({success_rate:.1%})")
+        
+        return negative_edges
+    
     def _fast_same_type_sampling(
         self, 
         nodes: List[int], 
@@ -908,8 +1022,13 @@ class RiskAwareNegativeSampler:
         if len(nodes) < 2 or num_samples == 0:
             return negative_edges
         
-        # 限制尝试次数
-        max_attempts = min(num_samples * 5, 5000)  # 进一步降低尝试次数
+        # 🔥 修复3: 大图检测与分块处理
+        if num_samples > 20000:  # 大图内部采样检测
+            print(f"🔧 检测到大图内部采样: {num_samples} 负样本，启用分块处理")
+            return self._chunked_same_type_sampling(nodes, num_samples, positive_edge_set)
+        
+        # 动态尝试次数
+        max_attempts = min(num_samples * 15, 100000)  # 从5000提升至10万
         attempts = 0
         
         while len(negative_edges) < num_samples and attempts < max_attempts:
@@ -921,6 +1040,55 @@ class RiskAwareNegativeSampler:
                 
             attempts += 1
             
+        return negative_edges
+    
+    def _chunked_same_type_sampling(
+        self, 
+        nodes: List[int], 
+        num_samples: int, 
+        positive_edge_set: set
+    ) -> List[List[int]]:
+        """🔥 大图同类型节点分块采样"""
+        negative_edges = []
+        chunk_size = 5000  # 每块5000负样本
+        
+        print(f"🔄 同类型分块采样开始: 目标={num_samples}, 节点数={len(nodes)}")
+        
+        remaining_samples = num_samples
+        chunk_count = 0
+        
+        while remaining_samples > 0 and chunk_count < 200:  # 最多200块
+            current_chunk_size = min(chunk_size, remaining_samples)
+            chunk_edges = []
+            
+            # 高效采样：限制尝试次数
+            max_chunk_attempts = current_chunk_size * 2  # 降低尝试比例
+            
+            for _ in range(max_chunk_attempts):
+                if len(chunk_edges) >= current_chunk_size:
+                    break
+                
+                try:
+                    src = random.choice(nodes)
+                    dst = random.choice(nodes)
+                    
+                    if (src != dst and 
+                        (src, dst) not in positive_edge_set and
+                        [src, dst] not in chunk_edges):
+                        chunk_edges.append([src, dst])
+                except:
+                    continue
+            
+            negative_edges.extend(chunk_edges)
+            remaining_samples -= len(chunk_edges)
+            chunk_count += 1
+            
+            if chunk_count % 20 == 0:  # 每20块输出进度
+                print(f"   📊 进度: 已生成 {len(negative_edges)}/{num_samples} ({len(negative_edges)/num_samples*100:.1f}%)")
+        
+        success_rate = len(negative_edges) / num_samples if num_samples > 0 else 0
+        print(f"✅ 同类型分块采样完成: 生成 {len(negative_edges)}/{num_samples} ({success_rate:.1%})")
+        
         return negative_edges
 
     def get_config(self) -> Dict:
