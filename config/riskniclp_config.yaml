@@ -1,0 +1,193 @@
+data:
+  adaptive_binning: false
+  cache_dir: data/csr_cache
+  chunk_size: 1000
+  correlation_threshold: 0.9
+  enable_edge_label_cache: true
+  enable_sample_cache: false
+  enable_streaming: true
+  feature_selection_method: hybrid
+  graph_dir: data/processed/graphs
+  max_edges_per_type: 50000
+  metadata_dir: data/processed/metadata
+  num_workers: 2
+  persistent_workers: false
+  pin_memory: false
+  prefetch_factor: 1
+  risk_norm_method: zscore_sigmoid
+  sample_cache_config:
+    cache_cleanup_on_config_change: true
+    compression_enabled: false
+    max_cache_size_gb: 0.0
+  subset_ratio: 0.1
+  temporal_encoding:
+    enable: true
+    fourier_dim: 32
+    fourier_sigma: 1.0
+    log_bins: 16
+    max_delta: 3600.0
+    method: log_bin
+    min_delta: 0.001
+    time_features:
+    - StartTime
+    - LastTime
+    - Dur
+  test_ratio: 0.1
+  train_ratio: 0.8
+  use_data_subset: true
+  val_ratio: 0.1
+  variance_threshold: 0.01
+device: cpu
+evaluation:
+  confidence_interval: true
+  metrics:
+  - auc
+  - aupr
+  - directional_hit_100
+  - mttd_30s
+  - risk_weighted_precision
+  - risk_weighted_recall
+  n_bootstrap: 1000
+  save_attention_weights: true
+  save_predictions: true
+  statistical_test: bootstrap
+  visualization: true
+experiment_name: null
+experiment_tags: []
+logging:
+  checkpoint_interval: 500
+  enable_tensorboard: false
+  enable_wandb: false
+  log_dir: logs
+  log_level: INFO
+  log_system_metrics: true
+  save_checkpoints: true
+  system_metrics_interval: 100
+  wandb_entity: null
+  wandb_project: riskniclp-5g
+logging_level: INFO
+memory:
+  enable_memory_monitoring: true
+  force_gc_frequency: 1
+  lazy_loading: true
+  max_cache_size_mb: 256
+  max_memory_gb: 6.0
+  use_memory_mapping: true
+model:
+  dropout: 0.3
+  feature_dim: 45
+  gravity_epsilon: 1e-3
+  hidden_dim: 64
+  input_dim: 112
+  node_feature_dims:
+    Alert: 9
+    Flow: 17
+    UE: 16
+  num_heads: 4
+  num_layers: 2
+  num_risk_bins: 8
+  risk_embed_dim: 16
+  temperature: 0.2
+notes: Baseline RiskNICLP-5G implementation with CPU optimization and heterogeneous
+  node feature support
+num_threads: 8
+phase2:
+  cross_scale_context:
+    enabled: true
+    fusion_method: gate
+  negative_sampling:
+    difficulty_distribution:
+      easy: 0.7
+      hard: 0.05
+      medium: 0.25
+    enabled: true
+    max_attempts_multiplier: 15
+    neg_ratio: 0.3
+    quality_threshold: 0.8
+    risk_recalibration:
+      alert_boost_factor: 2.0
+      enable_type_wise_normalization: true
+      enabled: true
+      flow_decay_factor: 0.5
+      ue_baseline: 0.2
+    seed: 42
+    semantic_constraints:
+      min_temporal_gap: 5.0
+      spatial_constraint_enabled: true
+      temporal_constraint_enabled: true
+    strategy: attack_focused
+    type: attack_propagation
+  risk_bias_attention:
+    beta_1: 0.5
+    beta_2: 0.5
+    enabled: true
+    initialization:
+      beta_init_mean: 0.5
+      beta_init_std: 0.1
+      temp_init_range:
+      - 0.5
+      - 1.0
+    learning_rate_multiplier: 5.0
+    method: simplified
+    temperature: 0.8
+  temporal_prediction:
+    enabled: true
+    future_steps: 3
+    graph_rnn:
+      message_passing_steps: 3
+      node_level_generation: true
+      rnn_type: GRU
+    hetero_lstm:
+      bidirectional: false
+      graph_aggregation: mean_pool
+      lstm_layers: 1
+      spatial_encoder_reuse: true
+    lead_time_targets:
+    - 5
+    - 10
+    - 15
+    method: hetero_lstm
+    stride: 1
+    tgat_risk:
+      edge_level_modeling: true
+      num_heads: 4
+      risk_bias_temperature: 0.1
+      time_encoding_dim: 16
+    window_size: 5
+  training_enhancements:
+    base_epochs: 20
+    early_stopping:
+      enabled: true
+      min_delta: 0.001
+      patience: 10
+    progressive: true
+    risk_epochs: 30
+    scheduler: cosine
+security:
+  enable_data_anonymization: true
+  hash_sensitive_fields: true
+  log_data_access: true
+  max_log_retention_days: 30
+seed: 42
+training:
+  accumulate_steps: 4
+  attack_accuracy_threshold: 0.75
+  basic_epochs: 10
+  batch_size: 1
+  early_warning_weight: 1.5
+  eta_min_ratio: 0.1
+  gradient_clip_norm: 1.5
+  learning_rate: 0.003
+  max_epochs: 15
+  positive_sample_ratios:
+    default: 0.15
+    initiates: 0.25
+    temporal_adj: 0.2
+    triggers: 0.3
+  risk_aware_epochs: 5
+  risk_param_lr_multiplier: 5.0
+  risk_param_weight_decay: 5e-4
+  risk_recall_threshold: 0.7
+  scheduler_type: cosine
+  warmup_epochs: 1
+  weight_decay: 0.0005

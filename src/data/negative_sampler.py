@@ -7,11 +7,13 @@ Implements different negative sampling strategies:
 """
 
 import torch
+import dgl
 import numpy as np
 import random
-from typing import List, Tuple, Optional, Dict
-import dgl
+from typing import Dict, List, Optional, Tuple, Any, Set
 from ..common.logger import get_logger
+from pathlib import Path
+import time
 
 
 class BaselineNegativeSampler:
@@ -49,21 +51,28 @@ class BaselineNegativeSampler:
         Returns:
             negative_edges: 负样本边 [num_neg_edges, 2]
         """
-        num_nodes = graph.number_of_nodes()
+        # 处理异质图和同质图的节点数量
+        if hasattr(graph, 'ntypes') and len(graph.ntypes) > 1:
+            # 异质图：使用最大的节点类型作为采样空间
+            num_nodes = max([graph.number_of_nodes(ntype) for ntype in graph.ntypes])
+        else:
+            # 同质图
+            num_nodes = graph.number_of_nodes()
+
         num_pos_edges = positive_edges.shape[0]
         num_neg_edges = num_pos_edges * self.neg_ratio
-        
+
         # 将正样本边转换为set以快速查找
         positive_edge_set = set()
         for i in range(num_pos_edges):
             src, dst = positive_edges[i].tolist()
             positive_edge_set.add((src, dst))
             positive_edge_set.add((dst, src))  # 无向图
-            
+
         negative_edges = []
         max_attempts = num_neg_edges * 10  # 避免无限循环
         attempts = 0
-        
+
         while len(negative_edges) < num_neg_edges and attempts < max_attempts:
             # 随机选择两个节点
             src = random.randint(0, num_nodes - 1)
@@ -107,70 +116,68 @@ class RiskAwareNegativeSampler:
         semantic_ratios: Dict[str, float] = None
     ):
         """
+        风险感知负采样器
+        
         Args:
             strategy: 采样策略 ('uniform', 'stratified', 'hard', 'semantic')
-            neg_ratio: 负样本与正样本的比例
-            risk_thresholds: 风险分层阈值 [高, 中, 低]
-            hard_ratio: 困难负样本比例
+            neg_ratio: 负采样比例
+            risk_thresholds: 风险阈值列表 [high, mid, low]
+            hard_ratio: 困难样本比例
             seed: 随机种子
-            attack_type_mapping: 攻击类型到风险分数的映射
+            attack_type_mapping: 攻击类型映射权重
             max_attempts_multiplier: 最大尝试次数倍数
-            quality_threshold: 采样质量阈值
-            semantic_ratios: 异质图边类型采样比例
+            quality_threshold: 质量阈值
+            semantic_ratios: 语义采样比例 (已弃用，请使用semantic_pyramid策略)
         """
+        # 向后兼容性处理
+        if semantic_ratios is not None:
+            import warnings
+            warnings.warn(
+                "参数'semantic_ratios'已弃用，请使用type='semantic_pyramid'的独立采样器。"
+                "当前将继续工作但建议迁移到SemanticNegativeSampler。",
+                DeprecationWarning,
+                stacklevel=2
+            )
+        
+        # 策略兼容性检查
+        if strategy == 'semantic' and 'semantic' not in self._get_available_strategies():
+            import warnings
+            warnings.warn(
+                "strategy='semantic'现已升级为三层金字塔架构。"
+                "建议使用type='semantic_pyramid'创建专用采样器获得最佳效果。",
+                FutureWarning,
+                stacklevel=2
+            )
+            
         self.strategy = strategy
         self.neg_ratio = neg_ratio
-        self.risk_thresholds = sorted(risk_thresholds, reverse=True)
+        self.risk_thresholds = risk_thresholds
         self.hard_ratio = hard_ratio
         self.seed = seed
+        self.attack_type_mapping = attack_type_mapping or {}
         self.max_attempts_multiplier = max_attempts_multiplier
         self.quality_threshold = quality_threshold
-        self.logger = get_logger()
+        self.semantic_ratios = semantic_ratios  # 保留以维持向后兼容性
         
-        # 设置语义感知采样比例
-        default_semantic_ratios = {
-            'ue_flow_ratio': 0.4,
-            'flow_alert_ratio': 0.3,
-            'high_risk_ratio': 0.3
+        # 初始化采样统计
+        self.sampling_stats = {
+            'total_calls': 0,
+            'successful_samples': 0,
+            'fallback_count': 0,
+            'avg_quality': 0.0
         }
-        if semantic_ratios is None:
-            self.semantic_ratios = default_semantic_ratios
-        else:
-            # 合并用户配置和默认配置，确保所有键都存在
-            self.semantic_ratios = {**default_semantic_ratios, **semantic_ratios}
-            
-        # 类型验证：确保所有值都是float类型
-        for key, value in self.semantic_ratios.items():
-            if not isinstance(value, (int, float)):
-                raise ValueError(f"semantic_ratios['{key}'] 必须是数值类型，得到: {type(value)}")
-            self.semantic_ratios[key] = float(value)
-        
-        # 攻击类型到风险分数映射
-        if attack_type_mapping is None:
-            self.attack_type_mapping = {
-                'Benign': 0.0,
-                'ICMPFlood': 0.3,
-                'UDPFlood': 0.4,
-                'SYNFlood': 0.6,
-                'HTTPFlood': 0.7,
-                'SlowrateDoS': 0.8,
-                'TCPConnectScan': 0.7,
-                'SYNScan': 0.6,
-                'UDPScan': 0.5
-            }
-        else:
-            self.attack_type_mapping = attack_type_mapping
-        
-        # 🔧 动态阈值：初始化为None，在采样时基于实际数据计算
-        self._dynamic_risk_thresholds = None
         
         # 设置随机种子
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
         
-        # 预计算常用值
+        # 预计算采样参数
         self._prepare_sampling_parameters()
+    
+    def _get_available_strategies(self) -> List[str]:
+        """获取当前可用的采样策略列表"""
+        return ['uniform', 'stratified', 'hard', 'semantic']
     
     def _prepare_sampling_parameters(self):
         """预计算采样参数"""
@@ -178,9 +185,510 @@ class RiskAwareNegativeSampler:
             'uniform': self._uniform_sampling,
             'stratified': self._stratified_sampling,
             'hard': self._hard_sampling,
-            'semantic': self._semantic_aware_sampling
+            'semantic': self._three_layer_pyramid_sampling  # 替换为新的三层金字塔采样
         }
         
+    def _three_layer_pyramid_sampling(
+        self, 
+        graph: dgl.DGLGraph, 
+        positive_edges: torch.Tensor, 
+        risk_scores: torch.Tensor
+    ) -> torch.Tensor:
+        """三层金字塔语义采样：Easy + Mid + Hard负样本分层策略"""
+        print("🔥 [三层金字塔采样] 启动新的语义负采样策略")
+        
+        if len(positive_edges) == 0:
+            return torch.empty((0, 2), dtype=torch.long)
+            
+        # 🔥 新增：总体超时保护机制
+        start_time = time.time()
+        max_total_time = 300  # 5分钟总超时
+        
+        num_pos_edges = positive_edges.shape[0]
+        num_neg_edges = num_pos_edges * self.neg_ratio
+        
+        print(f"📊 [金字塔采样] 目标: {num_pos_edges}正样本 -> {num_neg_edges}负样本 (比例1:{self.neg_ratio})")
+        
+        # 🔥 大图优化：如果负样本需求过大，启用分批采样
+        if num_neg_edges > 500000:  # 超过50万条负样本
+            print(f"⚡ [大图优化] 检测到大规模采样需求({num_neg_edges}边)，启用分批处理")
+            return self._chunked_pyramid_sampling(graph, positive_edges, risk_scores, max_total_time)
+        
+        # 构建正样本边集合用于查重
+        positive_edge_set = set(map(tuple, positive_edges.cpu().numpy()))
+        
+        # 计算自适应风险阈值
+        thresholds = self._compute_pyramid_thresholds(risk_scores)
+        print(f"🎯 [风险阈值] T_low={thresholds['T_low']:.3f}, T_high={thresholds['T_high']:.3f}")
+        
+        # 计算各层级需要的边数（Phase 1配置：0.6/0.3/0.1）
+        num_easy = int(num_neg_edges * 0.6)  # Easy-Neg: 60%
+        num_mid = int(num_neg_edges * 0.3)   # Mid-Neg: 30%
+        num_hard = num_neg_edges - num_easy - num_mid  # Hard-Neg: 10%
+        
+        print(f"📐 [三层配置] Easy:{num_easy}(60%), Mid:{num_mid}(30%), Hard:{num_hard}(10%)")
+        
+        negative_edges = []
+        
+        # 初始化各层结果变量
+        easy_negatives = []
+        mid_negatives = []
+        hard_negatives = []
+        
+        # Layer 1: Easy negatives (低风险节点连接)
+        if num_easy > 0:
+            print(f"🟢 [Layer 1] 开始Easy-Neg采样: 目标{num_easy}条边")
+            layer_start_time = time.time()
+            
+            easy_negatives = self._sample_easy_negatives_pyramid(
+                graph, num_easy, positive_edge_set, risk_scores, thresholds
+            )
+            negative_edges.extend(easy_negatives)
+            
+            layer_time = time.time() - layer_start_time
+            print(f"✅ [Layer 1] Easy-Neg完成: 实际生成{len(easy_negatives)}条边 (耗时{layer_time:.1f}s)")
+            
+            # 检查超时
+            if time.time() - start_time > max_total_time:
+                print(f"⏰ [超时保护] Easy-Neg后总时间超限，启用紧急回退")
+                return self._emergency_fallback_sampling(graph, positive_edges, negative_edges, num_neg_edges)
+        
+        # Layer 2: Mid negatives (异质风险连接)
+        if num_mid > 0:
+            print(f"🟡 [Layer 2] 开始Mid-Neg采样: 目标{num_mid}条边")
+            layer_start_time = time.time()
+            
+            mid_negatives = self._sample_mid_negatives_pyramid(
+                graph, num_mid, positive_edge_set, risk_scores, thresholds
+            )
+            negative_edges.extend(mid_negatives)
+            
+            layer_time = time.time() - layer_start_time
+            print(f"✅ [Layer 2] Mid-Neg完成: 实际生成{len(mid_negatives)}条边 (耗时{layer_time:.1f}s)")
+            
+            # 检查超时
+            if time.time() - start_time > max_total_time:
+                print(f"⏰ [超时保护] Mid-Neg后总时间超限，启用紧急回退")
+                return self._emergency_fallback_sampling(graph, positive_edges, negative_edges, num_neg_edges)
+            
+        # Layer 3: Hard negatives (高风险+互斥条件)
+        if num_hard > 0:
+            print(f"🔴 [Layer 3] 开始Hard-Neg采样: 目标{num_hard}条边")
+            layer_start_time = time.time()
+            
+            hard_negatives = self._sample_hard_negatives_pyramid(
+                graph, num_hard, positive_edge_set, risk_scores, thresholds
+            )
+            negative_edges.extend(hard_negatives)
+            
+            layer_time = time.time() - layer_start_time
+            print(f"✅ [Layer 3] Hard-Neg完成: 实际生成{len(hard_negatives)}条边 (耗时{layer_time:.1f}s)")
+        
+        # 确保数量正确并返回
+        negative_edges = negative_edges[:num_neg_edges]
+        
+        # 记录采样统计信息
+        actual_generated = len(negative_edges)
+        success_rate = actual_generated / num_neg_edges if num_neg_edges > 0 else 0
+        total_time = time.time() - start_time
+        
+        self._log_pyramid_sampling_stats(actual_generated, len(easy_negatives), len(mid_negatives), len(hard_negatives))
+        
+        print(f"🎉 [三层金字塔] 采样完成: {actual_generated}/{num_neg_edges} (成功率{success_rate:.1%}, 总耗时{total_time:.1f}s)")
+        
+        return torch.tensor(negative_edges, dtype=torch.long) if negative_edges else torch.empty((0, 2), dtype=torch.long)
+    
+    def _compute_pyramid_thresholds(self, risk_scores: torch.Tensor) -> Dict[str, float]:
+        """计算三层金字塔的自适应风险阈值"""
+        return {
+            'T_low': torch.quantile(risk_scores, 0.3).item(),   # 30%分位作为低风险阈值
+            'T_high': torch.quantile(risk_scores, 0.7).item(),  # 70%分位作为高风险阈值
+            'T_mid': torch.quantile(risk_scores, 0.5).item()    # 50%分位作为中等风险阈值
+        }
+    
+    def _sample_easy_negatives_pyramid(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """Layer 1: Easy-Neg采样（低风险节点连接）"""
+        if num_edges == 0:
+            return []
+            
+        low_risk_nodes = torch.where(risk_scores < thresholds['T_low'])[0]
+        
+        if len(low_risk_nodes) < 2:
+            # 回退到最低风险20%节点
+            num_low_risk = max(2, len(risk_scores) // 5)
+            _, indices = torch.topk(risk_scores, num_low_risk, largest=False)
+            low_risk_nodes = indices
+        
+        easy_negatives = []
+        max_attempts = num_edges * 20
+        attempts = 0
+        
+        while len(easy_negatives) < num_edges and attempts < max_attempts:
+            try:
+                u, v = self._sample_node_pair_safe(low_risk_nodes)
+                
+                # Easy-Neg检查：避免正边和历史边
+                if (u, v) not in positive_edge_set and \
+                   not self._has_edge_in_graph(graph, u, v):
+                    easy_negatives.append([u, v])
+            except:
+                pass  # 采样失败，继续尝试
+            attempts += 1
+        
+        return easy_negatives
+    
+    def _sample_mid_negatives_pyramid(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """Layer 2: Mid-Neg采样（异质风险连接）- 修复大图性能"""
+        if num_edges == 0:
+            return []
+            
+        print(f"   🔍 [Mid-Neg] 检查节点分布...")
+        
+        high_risk_nodes = torch.where(risk_scores > thresholds['T_high'])[0]
+        low_risk_nodes = torch.where(risk_scores < thresholds['T_low'])[0]
+        
+        print(f"   📊 [Mid-Neg] 高风险节点:{len(high_risk_nodes)}, 低风险节点:{len(low_risk_nodes)}")
+        
+        # 🔥 关键修复：检查节点数量是否足够高效采样
+        min_nodes_for_efficient_sampling = max(100, num_edges // 1000)  # 自适应阈值
+        
+        if len(high_risk_nodes) < min_nodes_for_efficient_sampling or len(low_risk_nodes) < min_nodes_for_efficient_sampling:
+            print(f"   ⚠️ [Mid-Neg] 高/低风险节点不足，触发自适应调整")
+            
+            # 自适应策略：扩大风险阈值范围
+            adjusted_thresholds = self._adjust_thresholds_for_efficiency(risk_scores, num_edges)
+            high_risk_nodes = torch.where(risk_scores > adjusted_thresholds['T_high'])[0]
+            low_risk_nodes = torch.where(risk_scores < adjusted_thresholds['T_low'])[0]
+            
+            print(f"   🔧 [Mid-Neg] 调整后节点数: 高风险:{len(high_risk_nodes)}, 低风险:{len(low_risk_nodes)}")
+            
+            # 如果调整后仍然不足，使用回退策略
+            if len(high_risk_nodes) == 0 or len(low_risk_nodes) == 0:
+                print(f"   🔄 [Mid-Neg] 回退到中等风险节点内采样")
+                return self._fallback_mid_range_sampling(graph, num_edges, positive_edge_set, risk_scores, thresholds)
+        
+        # 🔥 性能优化：预计算采样效率，设置合理的尝试次数
+        sampling_efficiency = min(len(high_risk_nodes), len(low_risk_nodes)) / max(num_edges, 1)
+        if sampling_efficiency < 0.1:  # 效率太低
+            max_attempts = min(num_edges * 50, 100000)  # 限制最大尝试次数
+            print(f"   ⚡ [Mid-Neg] 低效率模式: 采样效率{sampling_efficiency:.3f}, 限制尝试{max_attempts}次")
+        else:
+            max_attempts = num_edges * 10  # 高效率模式
+            print(f"   🚀 [Mid-Neg] 高效率模式: 采样效率{sampling_efficiency:.3f}, 尝试{max_attempts}次")
+        
+        mid_negatives = []
+        attempts = 0
+        start_time = torch.cuda.Event(enable_timing=True) if torch.cuda.is_available() else None
+        
+        # 🔥 新增：批量采样优化（每次生成多个候选）
+        batch_size = min(1000, max(100, num_edges // 100))
+        progress_checkpoint = max_attempts // 10  # 每10%进度报告一次
+        
+        while len(mid_negatives) < num_edges and attempts < max_attempts:
+            batch_start = attempts
+            
+            # 批量生成候选边
+            for _ in range(batch_size):
+                if attempts >= max_attempts:
+                    break
+                    
+                try:
+                    u = self._sample_from_nodes_safe(high_risk_nodes)
+                    v = self._sample_from_nodes_safe(low_risk_nodes)
+                    
+                    # 随机化高/低端顺序，防止方向性偏差
+                    if torch.rand(1).item() < 0.5:
+                        u, v = v, u
+                        
+                    if (u, v) not in positive_edge_set:
+                        mid_negatives.append([u, v])
+                        
+                        # 🔥 早期成功退出：如果达到目标，立即退出
+                        if len(mid_negatives) >= num_edges:
+                            break
+                            
+                except Exception as e:
+                    pass  # 静默处理异常，继续采样
+                    
+                attempts += 1
+            
+            # 进度报告
+            if attempts % progress_checkpoint == 0:
+                progress = (attempts / max_attempts) * 100
+                current_count = len(mid_negatives)
+                success_rate = current_count / attempts if attempts > 0 else 0
+                print(f"   📈 [Mid-Neg] 进度:{progress:.1f}%, 已生成:{current_count}/{num_edges}, 成功率:{success_rate:.1%}")
+        
+        actual_generated = len(mid_negatives)
+        success_rate = actual_generated / num_edges if num_edges > 0 else 0
+        
+        print(f"   ✅ [Mid-Neg] 完成: 生成{actual_generated}/{num_edges}边 (成功率{success_rate:.1%}, 尝试{attempts}次)")
+        
+        # 🔥 质量不足时的补救措施
+        if actual_generated < num_edges * 0.8:  # 成功率低于80%
+            print(f"   🔄 [Mid-Neg] 成功率低，启用补救采样")
+            shortage = num_edges - actual_generated
+            fallback_edges = self._fallback_mid_range_sampling(graph, shortage, positive_edge_set, risk_scores, thresholds)
+            mid_negatives.extend(fallback_edges)
+            print(f"   🔧 [Mid-Neg] 补救完成: 额外生成{len(fallback_edges)}边")
+        
+        return mid_negatives[:num_edges]  # 确保不超出目标数量
+    
+    def _sample_hard_negatives_pyramid(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """Layer 3: Hard-Neg采样（高风险+互斥条件）"""
+        if num_edges == 0:
+            return []
+            
+        high_risk_nodes = torch.where(risk_scores > thresholds['T_high'])[0]
+        
+        if len(high_risk_nodes) < 2:
+            # 回退到Mid-Neg策略
+            return self._sample_mid_negatives_pyramid(graph, num_edges, positive_edge_set, risk_scores, thresholds)
+        
+        hard_negatives = []
+        fallback_count = 0
+        max_attempts = num_edges * 30  # Phase 1减少尝试次数
+        attempts = 0
+        
+        while attempts < max_attempts and len(hard_negatives) < num_edges:
+            try:
+                u, v = self._sample_node_pair_safe(high_risk_nodes)
+                
+                if (u, v) not in positive_edge_set and \
+                   self._check_basic_mutual_exclusion(u, v, graph):
+                    hard_negatives.append([u, v])
+            except:
+                pass
+            attempts += 1
+        
+        # Hard-Neg失败回退策略
+        actual_hard_count = len(hard_negatives)
+        min_required = max(1, int(num_edges * 0.05))  # 最少5%
+        
+        if actual_hard_count < min_required:
+            # 用Mid-Neg补齐不足部分
+            fallback_needed = min_required - actual_hard_count
+            fallback_edges = self._sample_mid_negatives_pyramid(
+                graph, fallback_needed, positive_edge_set, risk_scores, thresholds
+            )
+            hard_negatives.extend(fallback_edges)
+            fallback_count = len(fallback_edges)
+        
+        return hard_negatives[:num_edges]
+    
+    def _sample_node_pair_safe(self, node_set):
+        """安全的节点对采样"""
+        if len(node_set) < 2:
+            raise ValueError("节点集合太小")
+        
+        indices = torch.randperm(len(node_set))[:2]
+        u = node_set[indices[0]].item()
+        v = node_set[indices[1]].item()
+        return u, v
+    
+    def _sample_from_nodes_safe(self, node_set):
+        """安全的单节点采样"""
+        if len(node_set) == 0:
+            raise ValueError("节点集合为空")
+        
+        idx = torch.randint(0, len(node_set), (1,)).item()
+        return node_set[idx].item()
+    
+    def _sample_from_node_group(self, nodes, num_edges, positive_edge_set):
+        """从同一节点组采样边"""
+        sampled_edges = []
+        max_attempts = num_edges * 15
+        attempts = 0
+        
+        while len(sampled_edges) < num_edges and attempts < max_attempts:
+            try:
+                if len(nodes) >= 2:
+                    u, v = self._sample_node_pair_safe(nodes)
+                    if (u, v) not in positive_edge_set:
+                        sampled_edges.append([u, v])
+            except:
+                pass
+            attempts += 1
+        
+        return sampled_edges
+    
+    def _fallback_random_sampling_pyramid(self, graph, num_edges, positive_edge_set):
+        """三层金字塔的兜底随机采样"""
+        num_nodes = graph.number_of_nodes()
+        sampled_edges = []
+        max_attempts = num_edges * 10
+        attempts = 0
+        
+        while len(sampled_edges) < num_edges and attempts < max_attempts:
+            u = torch.randint(0, num_nodes, (1,)).item()
+            v = torch.randint(0, num_nodes, (1,)).item()
+            
+            if u != v and (u, v) not in positive_edge_set:
+                sampled_edges.append([u, v])
+            attempts += 1
+        
+        return sampled_edges
+    
+    def _has_edge_in_graph(self, graph, u, v):
+        """检查图中是否已存在边"""
+        try:
+            if graph.is_homogeneous:
+                return graph.has_edge_between(u, v)
+            else:
+                # 异质图：检查所有边类型
+                for etype in graph.etypes:
+                    try:
+                        if graph.has_edge_between(u, v, etype=etype):
+                            return True
+                    except:
+                        continue
+                return False
+        except:
+            return False
+    
+    def _check_basic_mutual_exclusion(self, u, v, graph):
+        """基础互斥条件检查（Phase 1简化版）"""
+        # 基础检查：节点不能相同
+        if u == v:
+            return False
+        
+        # Phase 1: 简化互斥逻辑，主要检查是否为不同节点即可
+        # 后续Phase会逐步增强互斥条件
+        return True
+    
+    def _log_pyramid_sampling_stats(self, total_generated, num_easy, num_mid, num_hard):
+        """记录三层金字塔采样统计信息"""
+        print(f"📈 [采样统计] Easy:{num_easy}, Mid:{num_mid}, Hard:{num_hard}, 总计:{total_generated}")
+        
+        if not hasattr(self, '_pyramid_stats'):
+            self._pyramid_stats = {}
+        
+        self._pyramid_stats.update({
+            'total_generated': total_generated,
+            'easy_target': num_easy,
+            'mid_target': num_mid,
+            'hard_target': num_hard,
+            'easy_ratio': num_easy / total_generated if total_generated > 0 else 0,
+            'mid_ratio': num_mid / total_generated if total_generated > 0 else 0,
+            'hard_ratio': num_hard / total_generated if total_generated > 0 else 0
+        })
+        
+        if hasattr(self, 'logger'):
+            self.logger.info(f"🔄 三层金字塔采样统计:")
+            self.logger.info(f"   Easy-Neg: {num_easy} 条边")
+            self.logger.info(f"   Mid-Neg: {num_mid} 条边") 
+            self.logger.info(f"   Hard-Neg: {num_hard} 条边")
+            self.logger.info(f"   总计: {total_generated} 条负样本边")
+    
+    def _adjust_thresholds_for_efficiency(self, risk_scores, num_edges):
+        """自适应调整风险阈值以提高采样效率"""
+        print(f"   🔧 [阈值调整] 开始自适应调整...")
+        
+        # 获取风险分数统计信息
+        min_risk = torch.min(risk_scores).item()
+        max_risk = torch.max(risk_scores).item()
+        mean_risk = torch.mean(risk_scores).item()
+        std_risk = torch.std(risk_scores).item()
+        
+        print(f"   📊 [阈值调整] 风险统计: min={min_risk:.3f}, max={max_risk:.3f}, mean={mean_risk:.3f}, std={std_risk:.3f}")
+        
+        # 确保有足够的节点进行高效采样
+        target_nodes_per_group = max(1000, num_edges // 100)  # 至少1000个节点或num_edges/100
+        total_nodes = len(risk_scores)
+        
+        # 如果标准差很小，说明风险分布很集中，需要微调阈值
+        if std_risk < 0.1:
+            # 风险分布极度集中，使用均匀分割
+            print(f"   ⚠️ [阈值调整] 风险分布集中(std={std_risk:.3f})，使用均匀分割")
+            
+            # 按节点数量均匀分割
+            sorted_risks, _ = torch.sort(risk_scores)
+            low_idx = total_nodes // 3
+            high_idx = total_nodes * 2 // 3
+            
+            adjusted_T_low = sorted_risks[low_idx].item()
+            adjusted_T_high = sorted_risks[high_idx].item()
+            
+        else:
+            # 使用动态分位数调整
+            desired_high_ratio = min(0.4, target_nodes_per_group / total_nodes)  # 最多40%
+            desired_low_ratio = min(0.4, target_nodes_per_group / total_nodes)   # 最多40%
+            
+            # 确保比例合理
+            high_quantile = max(0.6, 1.0 - desired_high_ratio)  # 至少60%分位以上
+            low_quantile = min(0.4, desired_low_ratio)           # 最多40%分位以下
+            
+            adjusted_T_high = torch.quantile(risk_scores, high_quantile).item()
+            adjusted_T_low = torch.quantile(risk_scores, low_quantile).item()
+            
+        # 防止阈值重叠
+        if adjusted_T_high <= adjusted_T_low:
+            mid_point = (min_risk + max_risk) / 2
+            adjusted_T_low = min_risk + (mid_point - min_risk) * 0.3
+            adjusted_T_high = min_risk + (mid_point - min_risk) * 0.7
+            
+        # 验证调整后的节点数量
+        adjusted_high_nodes = torch.sum(risk_scores > adjusted_T_high).item()
+        adjusted_low_nodes = torch.sum(risk_scores < adjusted_T_low).item()
+        
+        print(f"   ✅ [阈值调整] 新阈值: T_low={adjusted_T_low:.3f}→{adjusted_low_nodes}节点, T_high={adjusted_T_high:.3f}→{adjusted_high_nodes}节点")
+        
+        return {
+            'T_low': adjusted_T_low,
+            'T_high': adjusted_T_high,
+            'T_mid': (adjusted_T_low + adjusted_T_high) / 2
+        }
+    
+    def _fallback_mid_range_sampling(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """回退策略：从中等风险节点内采样"""
+        print(f"   🔄 [回退采样] 启动中等风险节点内采样")
+        
+        # 尝试使用中等风险节点
+        mid_risk_nodes = torch.where(
+            (risk_scores >= thresholds['T_low']) & 
+            (risk_scores <= thresholds['T_high'])
+        )[0]
+        
+        if len(mid_risk_nodes) >= 2:
+            print(f"   📊 [回退采样] 中等风险节点:{len(mid_risk_nodes)}个")
+            return self._sample_from_node_group(mid_risk_nodes, num_edges, positive_edge_set)
+        
+        # 如果中等风险节点也不足，使用风险分数排序的采样
+        print(f"   ⚠️ [回退采样] 中等风险节点不足，使用分层随机采样")
+        
+        total_nodes = len(risk_scores)
+        if total_nodes < 100:
+            # 小图：直接随机采样
+            return self._fallback_random_sampling_pyramid(graph, num_edges, positive_edge_set)
+        
+        # 大图：分层采样策略
+        sampled_edges = []
+        max_attempts = min(num_edges * 20, 50000)  # 限制最大尝试次数
+        attempts = 0
+        
+        # 按风险分数排序，取中间部分节点
+        sorted_indices = torch.argsort(risk_scores)
+        quarter = total_nodes // 4
+        mid_range_nodes = sorted_indices[quarter:3*quarter]  # 中间50%的节点
+        
+        print(f"   🎯 [回退采样] 使用中间{len(mid_range_nodes)}个节点进行采样")
+        
+        while len(sampled_edges) < num_edges and attempts < max_attempts:
+            try:
+                if len(mid_range_nodes) >= 2:
+                    idx1, idx2 = torch.randperm(len(mid_range_nodes))[:2]
+                    u = mid_range_nodes[idx1].item()
+                    v = mid_range_nodes[idx2].item()
+                    
+                    if u != v and (u, v) not in positive_edge_set:
+                        sampled_edges.append([u, v])
+            except:
+                pass
+            attempts += 1
+        
+        print(f"   ✅ [回退采样] 完成: 生成{len(sampled_edges)}/{num_edges}边")
+        return sampled_edges
+    
     def _calculate_adaptive_neg_ratio(self, positive_edges: torch.Tensor, graph: dgl.DGLGraph) -> int:
         """🔧 修复自适应负采样比例计算，严格遵循配置比例"""
         num_pos_edges = positive_edges.shape[0]
@@ -728,96 +1236,21 @@ class RiskAwareNegativeSampler:
         risk_scores: torch.Tensor
     ) -> torch.Tensor:
         """
-        优化版本的语义感知负采样 - 大幅提升性能
+        DEPRECATED: 使用三层金字塔采样替代
         
-        Args:
-            graph: DGL异质图
-            positive_edges: 正样本边
-            risk_scores: 风险分数
-            
-        Returns:
-            negative_edges: 语义感知的负样本边
+        为保持向后兼容性，直接调用新的三层金字塔采样方法
         """
-        num_pos_edges = positive_edges.shape[0]
-        num_neg_edges = num_pos_edges * self.neg_ratio
+        import warnings
+        warnings.warn(
+            "⚠️ _semantic_aware_sampling已被三层金字塔采样替代，"
+            "请使用strategy='semantic'配合RiskAwareNegativeSampler", 
+            DeprecationWarning, 
+            stacklevel=2
+        )
         
-        # 将正样本边转换为set
-        positive_edge_set = set()
-        for i in range(num_pos_edges):
-            src, dst = positive_edges[i].tolist()
-            positive_edge_set.add((src, dst))
-            positive_edge_set.add((dst, src))
-        
-        negative_edges = []
-        
-        if hasattr(graph, 'etypes') and len(graph.etypes) > 0:
-            # 异质图的快速语义感知采样
-            node_type_ranges = self._get_node_type_ranges(graph)
-            
-            # 安全获取采样比例，确保类型正确
-            try:
-                ue_flow_ratio = float(self.semantic_ratios.get('ue_flow_ratio', 0.4))
-                flow_alert_ratio = float(self.semantic_ratios.get('flow_alert_ratio', 0.3))
-                high_risk_ratio = float(self.semantic_ratios.get('high_risk_ratio', 0.3))
-            except (TypeError, ValueError) as e:
-                self.logger.warning(f"语义采样比例类型错误，使用默认值: {e}")
-                ue_flow_ratio, flow_alert_ratio, high_risk_ratio = 0.4, 0.3, 0.3
-            
-            # 1. UE-Flow虚假发起边 (40%) - 快速采样
-            num_ue_flow_edges = int(num_neg_edges * ue_flow_ratio)
-            ue_flow_negatives = self._fast_cross_type_sampling(
-                node_type_ranges.get('UE', []), 
-                node_type_ranges.get('Flow', []),
-                num_ue_flow_edges, positive_edge_set, risk_scores
-            )
-            negative_edges.extend(ue_flow_negatives)
-            
-            # 2. Flow-Alert虚假触发边 (30%) - 快速采样
-            num_flow_alert_edges = int(num_neg_edges * flow_alert_ratio)
-            flow_alert_negatives = self._fast_cross_type_sampling(
-                node_type_ranges.get('Flow', []), 
-                node_type_ranges.get('Alert', []),
-                num_flow_alert_edges, positive_edge_set, risk_scores
-            )
-            negative_edges.extend(flow_alert_negatives)
-            
-            # 3. 高风险节点内部虚假连接 (30%) - 快速采样
-            remaining = num_neg_edges - len(negative_edges)
-            if remaining > 0:
-                # 安全获取风险阈值
-                try:
-                    risk_threshold = float(self.risk_thresholds[0])
-                except (TypeError, ValueError, IndexError):
-                    risk_threshold = 0.8  # 默认高风险阈值
-                
-                # 安全的风险分数比较
-                try:
-                    # 确保risk_scores是float tensor
-                    risk_scores = risk_scores.float()
-                    risk_threshold = float(risk_threshold)
-                    high_risk_mask = risk_scores > risk_threshold
-                    high_risk_nodes = torch.where(high_risk_mask)[0]
-                except Exception as e:
-                    # 如果比较失败，使用前20%节点作为高风险
-                    num_high_risk = max(1, graph.number_of_nodes() // 5)
-                    high_risk_nodes = torch.arange(num_high_risk)
-                    if hasattr(self, 'logger'):
-                        self.logger.warning(f"风险分数比较失败，使用默认高风险节点: {e}")
-                
-                if len(high_risk_nodes) > 1:
-                    high_risk_negatives = self._fast_same_type_sampling(
-                        high_risk_nodes.tolist(), remaining, positive_edge_set
-                    )
-                    negative_edges.extend(high_risk_negatives)
-        else:
-            # 同质图的风险分层采样
-            negative_edges = self._stratified_sampling(graph, positive_edges, risk_scores)
-            return negative_edges
-        
-        # 确保数量正确
-        negative_edges = negative_edges[:num_neg_edges]
-        
-        return torch.tensor(negative_edges, dtype=torch.long) if negative_edges else torch.empty((0, 2), dtype=torch.long)
+        # 直接调用新的三层金字塔采样
+        print("🔄 [DEPRECATED] semantic_aware_sampling -> 路由到三层金字塔采样")
+        return self._three_layer_pyramid_sampling(graph, positive_edges, risk_scores)
     
     def _get_node_type_ranges(self, graph: dgl.DGLGraph) -> Dict[str, List[int]]:
         """
@@ -1106,35 +1539,750 @@ class RiskAwareNegativeSampler:
             'semantic_ratios': self.semantic_ratios
         }
 
-
-def create_negative_sampler(config: Dict) -> BaselineNegativeSampler:
-    """
-    根据配置创建负采样器
+    def _chunked_pyramid_sampling(self, graph, positive_edges, risk_scores, max_total_time):
+        """分批金字塔采样：处理超大规模图"""
+        print(f"⚡ [分批采样] 启动超大图分批处理模式")
+        
+        num_pos_edges = positive_edges.shape[0]
+        num_neg_edges = num_pos_edges * self.neg_ratio
+        
+        # 分批策略：将大任务分解为多个小任务
+        chunk_size = 100000  # 每批最多10万条边
+        num_chunks = (num_neg_edges + chunk_size - 1) // chunk_size
+        
+        print(f"📊 [分批采样] 总需求{num_neg_edges}边，分为{num_chunks}批，每批{chunk_size}边")
+        
+        all_negative_edges = []
+        positive_edge_set = set(map(tuple, positive_edges.cpu().numpy()))
+        thresholds = self._compute_pyramid_thresholds(risk_scores)
+        
+        start_time = time.time()
+        
+        for chunk_idx in range(num_chunks):
+            chunk_start_time = time.time()
+            
+            # 计算当前批次的目标边数
+            remaining_edges = num_neg_edges - len(all_negative_edges)
+            current_chunk_size = min(chunk_size, remaining_edges)
+            
+            if current_chunk_size <= 0:
+                break
+            
+            print(f"🔄 [分批采样] 处理第{chunk_idx+1}/{num_chunks}批 (目标:{current_chunk_size}边)")
+            
+            # 为当前批次分配三层比例
+            chunk_easy = int(current_chunk_size * 0.6)
+            chunk_mid = int(current_chunk_size * 0.3)
+            chunk_hard = current_chunk_size - chunk_easy - chunk_mid
+            
+            chunk_edges = []
+            
+            # 快速采样策略：针对大图优化
+            if chunk_easy > 0:
+                easy_edges = self._fast_easy_sampling(graph, chunk_easy, positive_edge_set, risk_scores, thresholds)
+                chunk_edges.extend(easy_edges)
+            
+            if chunk_mid > 0:
+                mid_edges = self._fast_mid_sampling(graph, chunk_mid, positive_edge_set, risk_scores, thresholds)
+                chunk_edges.extend(mid_edges)
+            
+            if chunk_hard > 0:
+                hard_edges = self._fast_hard_sampling(graph, chunk_hard, positive_edge_set, risk_scores, thresholds)
+                chunk_edges.extend(hard_edges)
+            
+            all_negative_edges.extend(chunk_edges)
+            
+            chunk_time = time.time() - chunk_start_time
+            total_time = time.time() - start_time
+            
+            print(f"✅ [分批采样] 第{chunk_idx+1}批完成: 生成{len(chunk_edges)}边 (批耗时{chunk_time:.1f}s, 总耗时{total_time:.1f}s)")
+            
+            # 检查超时
+            if total_time > max_total_time:
+                print(f"⏰ [分批采样] 超时退出，已完成{chunk_idx+1}/{num_chunks}批")
+                break
+        
+        final_count = len(all_negative_edges)
+        success_rate = final_count / num_neg_edges if num_neg_edges > 0 else 0
+        total_time = time.time() - start_time
+        
+        print(f"🎉 [分批采样] 完成: {final_count}/{num_neg_edges}边 (成功率{success_rate:.1%}, 总耗时{total_time:.1f}s)")
+        
+        return torch.tensor(all_negative_edges[:num_neg_edges], dtype=torch.long) if all_negative_edges else torch.empty((0, 2), dtype=torch.long)
     
+    def _emergency_fallback_sampling(self, graph, positive_edges, existing_edges, target_total):
+        """紧急回退采样：超时时的快速补齐策略"""
+        print(f"🚨 [紧急回退] 启动快速补齐采样")
+        
+        remaining_needed = target_total - len(existing_edges)
+        if remaining_needed <= 0:
+            return torch.tensor(existing_edges, dtype=torch.long)
+        
+        print(f"📊 [紧急回退] 需要补齐{remaining_needed}条边")
+        
+        # 快速随机采样策略
+        num_nodes = graph.number_of_nodes()
+        positive_edge_set = set(map(tuple, positive_edges.cpu().numpy()))
+        emergency_edges = []
+        
+        # 限制尝试次数，避免无限循环
+        max_attempts = min(remaining_needed * 5, 50000)
+        attempts = 0
+        
+        start_time = time.time()
+        emergency_timeout = 30  # 30秒紧急超时
+        
+        while len(emergency_edges) < remaining_needed and attempts < max_attempts:
+            # 检查紧急超时
+            if time.time() - start_time > emergency_timeout:
+                print(f"⏰ [紧急回退] 达到紧急超时({emergency_timeout}s)，停止采样")
+                break
+            
+            u = torch.randint(0, num_nodes, (1,)).item()
+            v = torch.randint(0, num_nodes, (1,)).item()
+            
+            if u != v and (u, v) not in positive_edge_set:
+                emergency_edges.append([u, v])
+            
+            attempts += 1
+        
+        # 合并所有边
+        all_edges = existing_edges + emergency_edges
+        final_edges = all_edges[:target_total]  # 确保不超出目标
+        
+        emergency_time = time.time() - start_time
+        print(f"🚨 [紧急回退] 完成: 补齐{len(emergency_edges)}边 (总计{len(final_edges)}/{target_total}, 耗时{emergency_time:.1f}s)")
+        
+        return torch.tensor(final_edges, dtype=torch.long)
+    
+    def _fast_easy_sampling(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """快速Easy-Neg采样：大图优化版"""
+        low_risk_nodes = torch.where(risk_scores < thresholds['T_low'])[0]
+        
+        if len(low_risk_nodes) < 10:
+            # 节点太少，扩大范围
+            num_low_risk = max(100, len(risk_scores) // 10)
+            _, indices = torch.topk(risk_scores, num_low_risk, largest=False)
+            low_risk_nodes = indices
+        
+        edges = []
+        max_attempts = min(num_edges * 10, 20000)  # 减少尝试次数
+        
+        for _ in range(max_attempts):
+            if len(edges) >= num_edges:
+                break
+            try:
+                u, v = self._sample_node_pair_safe(low_risk_nodes)
+                if (u, v) not in positive_edge_set:
+                    edges.append([u, v])
+            except:
+                continue
+        
+        return edges
+    
+    def _fast_mid_sampling(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """快速Mid-Neg采样：大图优化版"""
+        # 使用调整后的阈值
+        adjusted_thresholds = self._adjust_thresholds_for_efficiency(risk_scores, num_edges)
+        high_risk_nodes = torch.where(risk_scores > adjusted_thresholds['T_high'])[0]
+        low_risk_nodes = torch.where(risk_scores < adjusted_thresholds['T_low'])[0]
+        
+        if len(high_risk_nodes) == 0 or len(low_risk_nodes) == 0:
+            return self._fast_random_sampling(graph, num_edges, positive_edge_set)
+        
+        edges = []
+        max_attempts = min(num_edges * 5, 10000)  # 大幅减少尝试次数
+        
+        for _ in range(max_attempts):
+            if len(edges) >= num_edges:
+                break
+            try:
+                u = self._sample_from_nodes_safe(high_risk_nodes)
+                v = self._sample_from_nodes_safe(low_risk_nodes)
+                if torch.rand(1).item() < 0.5:
+                    u, v = v, u
+                if (u, v) not in positive_edge_set:
+                    edges.append([u, v])
+            except:
+                continue
+        
+        return edges
+    
+    def _fast_hard_sampling(self, graph, num_edges, positive_edge_set, risk_scores, thresholds):
+        """快速Hard-Neg采样：大图优化版"""
+        # 简化Hard-Neg逻辑，减少计算复杂度
+        return self._fast_mid_sampling(graph, num_edges, positive_edge_set, risk_scores, thresholds)
+    
+    def _fast_random_sampling(self, graph, num_edges, positive_edge_set):
+        """快速随机采样：兜底策略"""
+        num_nodes = graph.number_of_nodes()
+        edges = []
+        max_attempts = min(num_edges * 5, 10000)
+        
+        for _ in range(max_attempts):
+            if len(edges) >= num_edges:
+                break
+            u = torch.randint(0, num_nodes, (1,)).item()
+            v = torch.randint(0, num_nodes, (1,)).item()
+            if u != v and (u, v) not in positive_edge_set:
+                edges.append([u, v])
+        
+        return edges
+
+
+def create_negative_sampler(config: Dict):
+    """
+    根据配置创建负采样器 (重构后)
+
     Args:
         config: 采样器配置
-        
+
     Returns:
         负采样器实例
     """
     sampler_type = config.get('type', 'baseline')
-    
-    if sampler_type == 'baseline':
+
+    if sampler_type == 'attack_propagation':
+        # 🚀 新增：攻击传播采样器（专门针对攻击链路预测）
+        from .attack_propagation_sampler import AttackPropagationSampler, AttackPropagationConfig
+
+        # 创建攻击传播配置
+        attack_config = AttackPropagationConfig(
+            negative_ratio=config.get('neg_ratio', 2.0),
+            temporal_window=config.get('temporal_window', 60.0),
+            propagation_depth=config.get('propagation_depth', 3),
+            min_attack_confidence=config.get('min_attack_confidence', 0.6)
+        )
+
+        return AttackPropagationSampler(attack_config, config.get('seed', 42))
+    elif sampler_type == 'semantic_aware':
+        # 🚀 使用新的语义感知采样器（重构后的最优方案）
+        from .sampling_integration import create_negative_sampler_from_config
+        return create_negative_sampler_from_config(config)
+    elif sampler_type in ['unified', 'emergency', 'enhanced_emergency']:
+        # 🔥 使用重构后的统一采样框架
+        from .sampling_framework import NegativeSampler, SamplingConfig
+
+        sampling_config = SamplingConfig(
+            negative_ratio=config.get('neg_ratio', 1.0),
+            hard_negative_ratio=config.get('hard_ratio', 0.3),
+            temporal_negative_ratio=config.get('temporal_negative_ratio', 0.2),
+            quality_threshold=config.get('quality_threshold', 0.7),
+            max_attempts_multiplier=config.get('max_attempts_multiplier', 10),
+            seed=config.get('seed', 42)
+        )
+
+        return NegativeSampler(sampling_config)
+    elif sampler_type == 'baseline':
         return BaselineNegativeSampler(
             neg_ratio=config.get('neg_ratio', 3),
             seed=config.get('seed', 42)
         )
-    elif sampler_type == 'risk_aware':
-        return RiskAwareNegativeSampler(
-            strategy=config.get('strategy', 'stratified'),
-            neg_ratio=config.get('neg_ratio', 3),
-            risk_thresholds=config.get('risk_thresholds', [0.8, 0.5, 0.2]),
-            hard_ratio=config.get('hard_ratio', 0.3),
-            seed=config.get('seed', 42),
-            attack_type_mapping=config.get('attack_type_mapping', None),
+    elif sampler_type in ['risk_aware', 'semantic_pyramid']:
+        # 🔥 风险感知和语义采样也使用统一框架
+        from .sampling_framework import NegativeSampler, SamplingConfig
+
+        sampling_config = SamplingConfig(
+            negative_ratio=config.get('neg_ratio', 1.0),
+            hard_negative_ratio=config.get('hard_ratio', 0.3),
+            temporal_negative_ratio=config.get('temporal_negative_ratio', 0.2),
+            quality_threshold=config.get('quality_threshold', 0.7),
             max_attempts_multiplier=config.get('max_attempts_multiplier', 10),
-            quality_threshold=config.get('quality_threshold', 0.9),
-            semantic_ratios=config.get('semantic_ratios', None)
+            seed=config.get('seed', 42)
         )
+
+        return NegativeSampler(sampling_config)
     else:
-        raise ValueError(f"未知的采样器类型: {sampler_type}") 
+        # 默认使用基线采样器
+        return BaselineNegativeSampler(
+            neg_ratio=config.get('neg_ratio', 3),
+            seed=config.get('seed', 42)
+        )
+
+
+class LayerRatioScheduler:
+    """动态调整层级采样比例"""
+    
+    def __init__(self, 
+                 warmup_epochs: int = 5,
+                 target_ratios: Dict = {'easy': 0.4, 'mid': 0.4, 'hard': 0.2},
+                 init_ratios: Dict = {'easy': 0.6, 'mid': 0.3, 'hard': 0.1}):
+        self.warmup_epochs = warmup_epochs
+        self.target_ratios = target_ratios
+        self.init_ratios = init_ratios
+    
+    def get_ratios(self, epoch: int) -> Dict[str, float]:
+        """获取当前epoch的层级比例"""
+        if epoch < self.warmup_epochs:
+            # 训练前期: 降低Hard-Neg比例，稳定收敛
+            return self.init_ratios
+        else:
+            # 训练后期: 提升到目标比例
+            progress = min(1.0, (epoch - self.warmup_epochs) / self.warmup_epochs)
+            ratios = {}
+            for layer in ['easy', 'mid', 'hard']:
+                init_val = self.init_ratios[layer]
+                target_val = self.target_ratios[layer]
+                ratios[layer] = init_val + progress * (target_val - init_val)
+            return ratios
+
+class SemanticNegativeSampler:
+    """三层金字塔语义负采样器 - 工程优化版"""
+    
+    def __init__(self, 
+                 easy_ratio: float = 0.6,  # 调整: 训练前期降低难度
+                 mid_ratio: float = 0.3,   # 调整: 对应降低
+                 hard_ratio: float = 0.1,  # 调整: 先用低比例验证
+                 min_hard_ratio: float = 0.05,  # 新增: 失败回退最小比例
+                 neg_ratio: int = 3,
+                 risk_percentiles: Tuple[float, float] = (0.3, 0.7),  # 调整: smoke test用
+                 mutual_exclusion_config: Dict = None,
+                 layer_ratio_scheduler: Dict = None,  # 新增: 动态比例调整
+                 sampling_cache_config: Dict = None,  # 新增: 采样缓存配置
+                 seed: int = 42):
+        
+        self.neg_ratio = neg_ratio
+        self.layer_ratios = {
+            'easy': easy_ratio,
+            'mid': mid_ratio, 
+            'hard': hard_ratio
+        }
+        self.min_hard_ratio = min_hard_ratio
+        self.risk_thresholds = risk_percentiles
+        self.exclusion_config = mutual_exclusion_config or {}
+        self.scheduler_config = layer_ratio_scheduler or {}
+        self.cache_config = sampling_cache_config or {}
+        self.seed = seed
+        
+        # 性能优化: 预分配采样缓存
+        self._positive_edge_bitmap = None
+        self._attack_metadata_cache = {}
+        
+        # 初始化层级比例调度器
+        if self.scheduler_config.get('enable_ratio_scheduling', False):
+            self.ratio_scheduler = LayerRatioScheduler(
+                warmup_epochs=self.scheduler_config.get('warmup_epochs', 5),
+                target_ratios=self.scheduler_config.get('target_ratios', {'easy': 0.4, 'mid': 0.4, 'hard': 0.2}),
+                init_ratios=self.layer_ratios
+            )
+        else:
+            self.ratio_scheduler = None
+            
+        # 设置随机种子
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        
+    def sample_negatives(self, graph: dgl.DGLGraph, positive_edges: torch.Tensor, risk_scores: torch.Tensor, epoch: int = None) -> torch.Tensor:
+        """三层负采样主函数 - 支持动态比例调整"""
+        if len(positive_edges) == 0:
+            return torch.empty((0, 2), dtype=torch.long)
+            
+        # 更新层级比例（如果启用调度器）
+        current_ratios = self._update_layer_ratios(epoch) if epoch is not None else self.layer_ratios
+        
+        num_pos_edges = positive_edges.shape[0]
+        num_neg_edges = num_pos_edges * self.neg_ratio
+        
+        # 构建正样本边集合用于查重
+        positive_edge_set = self._build_positive_edge_bitmap(positive_edges)
+        
+        # 预计算攻击元数据缓存
+        self._precompute_attack_metadata(graph)
+        
+        # 计算各层级需要的边数
+        num_easy = int(num_neg_edges * current_ratios['easy'])
+        num_mid = int(num_neg_edges * current_ratios['mid'])
+        num_hard = num_neg_edges - num_easy - num_mid  # 剩余的给hard
+        
+        negative_edges = []
+        
+        # Layer 1: Easy negatives (低风险节点连接)
+        if num_easy > 0:
+            easy_negatives = self._sample_easy_negatives_enhanced(
+                graph, num_easy, positive_edge_set, risk_scores
+            )
+            negative_edges.extend(easy_negatives)
+        
+        # Layer 2: Mid negatives (异质风险连接)
+        if num_mid > 0:
+            mid_negatives = self._sample_mid_negatives_enhanced(
+                graph, num_mid, positive_edge_set, risk_scores
+            )
+            negative_edges.extend(mid_negatives)
+            
+        # Layer 3: Hard negatives (高风险+互斥条件)
+        if num_hard > 0:
+            hard_negatives = self._sample_hard_negatives_enhanced(
+                graph, num_hard, positive_edge_set, risk_scores
+            )
+            negative_edges.extend(hard_negatives)
+        
+        # 确保数量正确并返回
+        negative_edges = negative_edges[:num_neg_edges]
+        
+        return torch.tensor(negative_edges, dtype=torch.long) if negative_edges else torch.empty((0, 2), dtype=torch.long)
+    
+    def _update_layer_ratios(self, epoch: int) -> Dict[str, float]:
+        """动态调整层级比例"""
+        if self.ratio_scheduler is not None:
+            return self.ratio_scheduler.get_ratios(epoch)
+        else:
+            return self.layer_ratios
+    
+    def _build_positive_edge_bitmap(self, positive_edges) -> set:
+        """优化: 使用set快速查重，避免O(n)"""
+        return set(map(tuple, positive_edges.cpu().numpy()))
+    
+    def _compute_adaptive_thresholds(self, risk_scores: torch.Tensor) -> Dict[str, float]:
+        """基于数据分布的自适应风险阈值"""
+        return {
+            'T_low': torch.quantile(risk_scores, self.risk_thresholds[0]).item(),
+            'T_high': torch.quantile(risk_scores, self.risk_thresholds[1]).item(),
+            'T_mid': torch.quantile(risk_scores, 0.5).item()
+        }
+    
+    def _precompute_attack_metadata(self, graph):
+        """预序列化攻击元数据到缓存"""
+        if hasattr(graph, 'ndata') and not self._attack_metadata_cache:
+            node_types = graph.ntypes if hasattr(graph, 'ntypes') else ['default']
+            for ntype in node_types:
+                try:
+                    nodes = graph.nodes(ntype) if hasattr(graph, 'ntypes') else range(graph.number_of_nodes())
+                    for node_id in nodes:
+                        self._attack_metadata_cache[int(node_id)] = {
+                            'attack_type': self._get_node_attack_type(graph, node_id, ntype),
+                            'timestamp': self._get_node_timestamp(graph, node_id, ntype),
+                            'port_range': self._get_node_port_range(graph, node_id, ntype),
+                            'geo_location': self._get_node_location(graph, node_id, ntype)
+                        }
+                except Exception as e:
+                    continue
+    
+    def _get_node_attack_type(self, graph, node_id, ntype='default'):
+        """获取节点攻击类型"""
+        try:
+            if hasattr(graph, 'ntypes') and ntype in graph.ntypes:
+                node_data = graph.nodes[ntype].data
+                if 'attack_type' in node_data:
+                    return node_data['attack_type'][node_id].item()
+            elif hasattr(graph, 'ndata') and 'attack_type' in graph.ndata:
+                return graph.ndata['attack_type'][node_id].item()
+            
+            # 默认值基于节点类型
+            type_mapping = {'Alert': 'alert', 'Flow': 'flow', 'UE': 'ue'}
+            return type_mapping.get(ntype, 'unknown')
+        except:
+            return 'unknown'
+    
+    def _get_node_timestamp(self, graph, node_id, ntype='default'):
+        """获取节点时间戳"""
+        try:
+            if hasattr(graph, 'ntypes') and ntype in graph.ntypes:
+                node_data = graph.nodes[ntype].data
+                if 'timestamp' in node_data:
+                    return node_data['timestamp'][node_id].item()
+            elif hasattr(graph, 'ndata') and 'timestamp' in graph.ndata:
+                return graph.ndata['timestamp'][node_id].item()
+            return 0
+        except:
+            return 0
+    
+    def _get_node_port_range(self, graph, node_id, ntype='default'):
+        """获取节点端口范围"""
+        try:
+            if hasattr(graph, 'ntypes') and ntype in graph.ntypes:
+                node_data = graph.nodes[ntype].data
+                if 'port' in node_data:
+                    return node_data['port'][node_id].item()
+            elif hasattr(graph, 'ndata') and 'port' in graph.ndata:
+                return graph.ndata['port'][node_id].item()
+            return 0
+        except:
+            return 0
+    
+    def _get_node_location(self, graph, node_id, ntype='default'):
+        """获取节点地理位置"""
+        try:
+            if hasattr(graph, 'ntypes') and ntype in graph.ntypes:
+                node_data = graph.nodes[ntype].data
+                if 'location' in node_data:
+                    return node_data['location'][node_id].item()
+            elif hasattr(graph, 'ndata') and 'location' in graph.ndata:
+                return graph.ndata['location'][node_id].item()
+            return 0
+        except:
+            return 0
+    
+    def get_config(self) -> Dict:
+        """获取采样器配置"""
+        return {
+            'type': 'semantic_pyramid',
+            'neg_ratio': self.neg_ratio,
+            'layer_ratios': self.layer_ratios,
+            'min_hard_ratio': self.min_hard_ratio,
+            'risk_percentiles': self.risk_thresholds,
+            'mutual_exclusion_config': self.exclusion_config,
+            'scheduler_config': self.scheduler_config,
+            'cache_config': self.cache_config,
+            'seed': self.seed
+        }
+    
+    def _sample_easy_negatives_enhanced(self, graph, num_edges, positive_edge_set, risk_scores):
+        """Enhanced Easy-Neg: 低风险 + 历史查重 (60%->40%)"""
+        if num_edges == 0:
+            return []
+            
+        thresholds = self._compute_adaptive_thresholds(risk_scores)
+        low_risk_nodes = torch.where(risk_scores < thresholds['T_low'])[0]
+        
+        if len(low_risk_nodes) < 2:
+            # 回退到所有节点的最低风险20%
+            num_low_risk = max(2, len(risk_scores) // 5)
+            _, indices = torch.topk(risk_scores, num_low_risk, largest=False)
+            low_risk_nodes = indices
+        
+        easy_negatives = []
+        max_attempts = num_edges * 20
+        attempts = 0
+        
+        while len(easy_negatives) < num_edges and attempts < max_attempts:
+            u, v = self._sample_node_pair(low_risk_nodes)
+            
+            # 补强1: Easy-Neg也做互斥检查，避免伪正例
+            if (u, v) not in positive_edge_set and \
+               not self._has_historical_edge(graph, u, v) and \
+               self._check_mutual_exclusion(u, v, graph):
+                easy_negatives.append([u, v])
+            attempts += 1
+        
+        return easy_negatives
+
+    def _sample_mid_negatives_enhanced(self, graph, num_edges, positive_edge_set, risk_scores):
+        """Enhanced Mid-Neg: 异质风险 + 随机化方向 (30%->40%)"""
+        if num_edges == 0:
+            return []
+            
+        thresholds = self._compute_adaptive_thresholds(risk_scores)
+        high_risk_nodes = torch.where(risk_scores > thresholds['T_high'])[0]
+        low_risk_nodes = torch.where(risk_scores < thresholds['T_low'])[0]
+        
+        if len(high_risk_nodes) == 0 or len(low_risk_nodes) == 0:
+            # 回退到中等风险节点
+            mid_risk_nodes = torch.where(
+                (risk_scores >= thresholds['T_low']) & 
+                (risk_scores <= thresholds['T_high'])
+            )[0]
+            if len(mid_risk_nodes) >= 2:
+                return self._sample_from_same_risk_group(mid_risk_nodes, num_edges, positive_edge_set)
+            else:
+                return self._fallback_random_sampling_simple(graph, num_edges, positive_edge_set)
+        
+        mid_negatives = []
+        max_attempts = num_edges * 20
+        attempts = 0
+        
+        while len(mid_negatives) < num_edges and attempts < max_attempts:
+            u = self._sample_from_nodes(high_risk_nodes)
+            v = self._sample_from_nodes(low_risk_nodes)
+            
+            # 补强2: 随机化高/低端顺序，防止方向性偏差
+            if torch.rand(1).item() < 0.5:
+                u, v = v, u
+                
+            if (u, v) not in positive_edge_set:
+                mid_negatives.append([u, v])
+            attempts += 1
+        
+        return mid_negatives
+
+    def _sample_hard_negatives_enhanced(self, graph, num_edges, positive_edge_set, risk_scores):
+        """Enhanced Hard-Neg: 高风险+互斥 + 失败回退 (10%->20%)"""
+        if num_edges == 0:
+            return []
+            
+        thresholds = self._compute_adaptive_thresholds(risk_scores)
+        high_risk_nodes = torch.where(risk_scores > thresholds['T_high'])[0]
+        
+        if len(high_risk_nodes) < 2:
+            # 回退到Mid-Neg策略
+            return self._sample_mid_negatives_enhanced(graph, num_edges, positive_edge_set, risk_scores)
+        
+        hard_negatives = []
+        fallback_count = 0
+        max_attempts = num_edges * 50  # 增加尝试次数
+        attempts = 0
+        
+        while attempts < max_attempts and len(hard_negatives) < num_edges:
+            u, v = self._sample_node_pair(high_risk_nodes)
+            
+            if (u, v) not in positive_edge_set and \
+               self._check_mutual_exclusion(u, v, graph):
+                hard_negatives.append([u, v])
+            attempts += 1
+        
+        # 补强3: Hard-Neg失败回退策略
+        actual_hard_count = len(hard_negatives)
+        min_required = max(1, int(num_edges * self.min_hard_ratio))
+        
+        if actual_hard_count < min_required:
+            # 用Mid-Neg补齐不足部分
+            fallback_needed = min_required - actual_hard_count
+            fallback_edges = self._sample_mid_negatives_enhanced(
+                graph, fallback_needed, positive_edge_set, risk_scores
+            )
+            hard_negatives.extend(fallback_edges)
+            fallback_count = len(fallback_edges)
+        
+        # 记录退回率用于监控
+        self._log_fallback_stats(actual_hard_count, fallback_count, num_edges)
+        
+        return hard_negatives[:num_edges]
+    
+    def _sample_node_pair(self, node_set):
+        """从节点集合中采样一对节点"""
+        if len(node_set) < 2:
+            raise ValueError("节点集合太小，无法采样节点对")
+        
+        indices = torch.randperm(len(node_set))[:2]
+        u = node_set[indices[0]].item()
+        v = node_set[indices[1]].item()
+        return u, v
+    
+    def _sample_from_nodes(self, node_set):
+        """从节点集合中采样单个节点"""
+        if len(node_set) == 0:
+            raise ValueError("节点集合为空")
+        
+        idx = torch.randint(0, len(node_set), (1,)).item()
+        return node_set[idx].item()
+    
+    def _sample_from_same_risk_group(self, nodes, num_edges, positive_edge_set):
+        """从同一风险组中采样边"""
+        sampled_edges = []
+        max_attempts = num_edges * 20
+        attempts = 0
+        
+        while len(sampled_edges) < num_edges and attempts < max_attempts:
+            if len(nodes) >= 2:
+                u, v = self._sample_node_pair(nodes)
+                if (u, v) not in positive_edge_set:
+                    sampled_edges.append([u, v])
+            attempts += 1
+        
+        return sampled_edges
+    
+    def _fallback_random_sampling_simple(self, graph, num_edges, positive_edge_set):
+        """简单随机采样作为兜底"""
+        num_nodes = graph.number_of_nodes()
+        sampled_edges = []
+        max_attempts = num_edges * 10
+        attempts = 0
+        
+        while len(sampled_edges) < num_edges and attempts < max_attempts:
+            u = torch.randint(0, num_nodes, (1,)).item()
+            v = torch.randint(0, num_nodes, (1,)).item()
+            
+            if u != v and (u, v) not in positive_edge_set:
+                sampled_edges.append([u, v])
+            attempts += 1
+        
+        return sampled_edges
+    
+    def _has_historical_edge(self, graph, u, v):
+        """检查是否存在历史边"""
+        # 简化实现：检查图中是否已存在该边
+        try:
+            if graph.is_homogeneous:
+                return graph.has_edge_between(u, v)
+            else:
+                # 异质图：检查所有边类型
+                for etype in graph.etypes:
+                    try:
+                        if graph.has_edge_between(u, v, etype=etype):
+                            return True
+                    except:
+                        continue
+                return False
+        except:
+            return False
+    
+    def _check_mutual_exclusion(self, u, v, graph):
+        """互斥条件判断 - 性能优化版"""
+        # 基础检查：节点不能相同
+        if u == v:
+            return False
+        
+        # 如果没有启用互斥检查，直接通过
+        if not self.exclusion_config:
+            return True
+        
+        # 攻击类型不兼容检查
+        if self.exclusion_config.get('attack_type_check', False):
+            if not self._check_attack_type_mismatch(u, v):
+                return False
+        
+        # UE-Flow地域/端口不匹配检查
+        if self.exclusion_config.get('ue_flow_mismatch', False):
+            if not self._check_ue_flow_mismatch(u, v):
+                return False
+        
+        # 时间窗口检查
+        temporal_window = self.exclusion_config.get('temporal_window_hours', 0)
+        if temporal_window > 0:
+            if not self._check_temporal_window_violation_optimized(u, v, temporal_window):
+                return False
+        
+        return True
+    
+    def _check_attack_type_mismatch(self, u, v):
+        """攻击类型不兼容检查"""
+        u_metadata = self._attack_metadata_cache.get(u, {})
+        v_metadata = self._attack_metadata_cache.get(v, {})
+        
+        u_type = u_metadata.get('attack_type', 'unknown')
+        v_type = v_metadata.get('attack_type', 'unknown')
+        
+        # 如果是相同攻击类型，则不互斥（返回False表示不满足互斥条件）
+        return u_type != v_type
+    
+    def _check_ue_flow_mismatch(self, u, v):
+        """UE-Flow地域/端口不匹配检查"""
+        u_metadata = self._attack_metadata_cache.get(u, {})
+        v_metadata = self._attack_metadata_cache.get(v, {})
+        
+        u_port = u_metadata.get('port_range', 0)
+        v_port = v_metadata.get('port_range', 0)
+        u_location = u_metadata.get('geo_location', 0)
+        v_location = v_metadata.get('geo_location', 0)
+        
+        # 端口范围或地理位置不匹配才满足互斥条件
+        port_mismatch = abs(u_port - v_port) > 1000  # 端口差异阈值
+        location_mismatch = u_location != v_location
+        
+        return port_mismatch or location_mismatch
+    
+    def _check_temporal_window_violation_optimized(self, u, v, max_time_diff_hours=2):
+        """O(log n)时间窗口检查"""
+        u_metadata = self._attack_metadata_cache.get(u, {})
+        v_metadata = self._attack_metadata_cache.get(v, {})
+        
+        u_time = u_metadata.get('timestamp', 0)
+        v_time = v_metadata.get('timestamp', 0)
+        
+        time_diff_hours = abs(u_time - v_time) / 3600  # 假设timestamp是秒
+        return time_diff_hours > max_time_diff_hours
+    
+    def _log_fallback_stats(self, actual_hard_count, fallback_count, target_count):
+        """记录退回统计信息"""
+        fallback_rate = fallback_count / target_count if target_count > 0 else 0
+        # 简化版本：存储到实例变量中供外部访问
+        if not hasattr(self, '_sampling_stats'):
+            self._sampling_stats = {}
+        
+        self._sampling_stats.update({
+            'hard_sampling_success_count': actual_hard_count,
+            'fallback_count': fallback_count,
+            'target_hard_count': target_count,
+            'fallback_rate': fallback_rate
+        }) 

@@ -443,9 +443,9 @@ class RiskPPRCalculator:
                 all_ue_ppr.extend(result['ppr_scores']['UE'])
         if all_ue_ppr:
             plt.hist(all_ue_ppr, bins=30, alpha=0.7, color='green')
-            plt.title('UE节点PPR分数分布')
-            plt.xlabel('PPR分数')
-            plt.ylabel('频次')
+            plt.title('UE node PPR score distribution')
+            plt.xlabel('PPR score')
+            plt.ylabel('frequency')
         
         # 4. PPR分数分布 - Alert节点
         plt.subplot(3, 4, 4)

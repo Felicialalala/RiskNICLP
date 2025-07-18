@@ -16,6 +16,8 @@ from .intelligent_validator import IntelligentValidator
 from .risk_bias_diagnostic import RiskBiasIntelligentDiagnostic
 import torch.nn.functional as F
 import numpy as np
+import gc
+from ..utils.memory_monitor import MemoryMonitor, memory_efficient_decorator
 
 
 class ProgressiveTrainer:
@@ -24,7 +26,7 @@ class ProgressiveTrainer:
     def __init__(self, model, config, logger, device, temporal_predictor=None):
         """
         Initialize progressive trainer
-        
+
         Args:
             model: RiskNICLP model instance
             config: Configuration object
@@ -36,6 +38,9 @@ class ProgressiveTrainer:
         self.config = config
         self.logger = logger
         self.device = device
+
+        # 🔥 内存监控
+        self.memory_monitor = MemoryMonitor(logger.logger if hasattr(logger, 'logger') else logger)
         
         # Temporal prediction support
         self.temporal_predictor = temporal_predictor
@@ -128,17 +133,17 @@ class ProgressiveTrainer:
         """
         max_epochs = getattr(self.config.training, 'max_epochs', 20)
         
-        # 🔥 修复：使用配置文件中的阈值，而不是硬编码
+        # 🚀 攻击预测：使用攻击预测准确率阈值替代AUC
         phases = {
             'basic': {
                 'epochs': getattr(self.config.training, 'basic_epochs', 1),
-                'thresholds': {'val_auc': getattr(self.config.training, 'basic_auc_threshold', 0.60)},
-                'description': 'Basic GNN feature learning'
+                'thresholds': {'attack_accuracy': getattr(self.config.training, 'attack_accuracy_threshold', 0.75)},
+                'description': 'Basic attack pattern learning'
             },
             'risk_aware': {
-                'epochs': getattr(self.config.training, 'risk_aware_epochs', 8), 
-                'thresholds': {'risk_recall_100': getattr(self.config.training, 'risk_recall_threshold', 0.70)},
-                'description': 'Risk-aware attention training'
+                'epochs': getattr(self.config.training, 'risk_aware_epochs', 8),
+                'thresholds': {'early_warning_effectiveness': getattr(self.config.training, 'early_warning_threshold', 0.70)},
+                'description': 'Risk-aware attack propagation training'
             },
             'full_fusion': {
                 'epochs': max_epochs,
@@ -302,23 +307,31 @@ class ProgressiveTrainer:
             
             # Enhanced logging with phase info
             phase_desc = phases[current_phase]['description']
+
+            # 🚀 使用攻击预测指标替代AUC
+            attack_accuracy = val_metrics.get('accuracy', val_metrics.get('attack_prediction_accuracy', 0.0))
+            early_warning = val_metrics.get('early_warning', val_metrics.get('early_warning_effectiveness', 0.0))
+            false_alarm = val_metrics.get('false_alarm_rate', 0.0)
+
             self.logger.logger.info(
                 f"📊 Epoch {epoch + 1}/{max_epochs} [{current_phase.upper()}]: "
                 f"Train Loss: {train_loss:.4f}, "
-                f"Val AUC: {val_metrics.get('auc', 0.0):.4f}, "
+                f"Attack Acc: {attack_accuracy:.4f}, "
+                f"Early Warning: {early_warning:.4f}, "
+                f"False Alarm: {false_alarm:.4f}, "
                 f"Phase: {phase_desc}"
             )
-            
-            # Save best model
-            current_metric = val_metrics.get('auc', 0.0)
+
+            # Save best model based on attack prediction accuracy
+            current_metric = attack_accuracy
             if current_metric > self.best_metric:
                 self.best_metric = current_metric
                 self.save_checkpoint('best_model.pt')
-                self.logger.logger.info(f"💾 New best model saved (AUC: {current_metric:.4f})")
+                self.logger.logger.info(f"💾 New best model saved (Attack Accuracy: {current_metric:.4f})")
         
         # Final phase summary
-        self.logger.logger.info(f"✅ Progressive training completed. Best AUC: {self.best_metric:.4f}")
-        
+        self.logger.logger.info(f"✅ Progressive training completed. Best Attack Accuracy: {self.best_metric:.4f}")
+
         return self.model
     
     def train_temporal_sequences(self, graph_sequences: List, val_sequences: List) -> nn.Module:
@@ -725,11 +738,14 @@ class ProgressiveTrainer:
 
     def train_epoch(self, data_loader: DataLoader) -> float:
         """
-        🔥 修复版训练函数 - 解决梯度时序和消失问题
+        🔥 修复版训练函数 - 解决梯度时序和消失问题 + 内存监控
         """
         self.model.train()
         total_loss = 0.0
         num_batches = 0
+
+        # 🔥 训练开始前检查内存
+        self.memory_monitor.check_memory_usage("训练开始")
         
         # 🔥 阶段感知的负采样统计
         epoch_pos_samples = 0
@@ -737,6 +753,17 @@ class ProgressiveTrainer:
         
         for batch_idx, batch in enumerate(data_loader):
             try:
+                # 🔥 每10个batch检查一次内存
+                if batch_idx % 10 == 0:
+                    if not self.memory_monitor.check_memory_usage(f"Batch {batch_idx}"):
+                        # 内存使用过高，强制清理
+                        self.memory_monitor.force_cleanup()
+
+                        # 再次检查，如果仍然过高则中断训练
+                        if not self.memory_monitor.check_memory_usage(f"After cleanup - Batch {batch_idx}"):
+                            self.logger.logger.error(f"❌ 内存使用过高，中断训练 (Batch {batch_idx})")
+                            break
+
                 # Move batch to device
                 batch = self._move_batch_to_device(batch)
                 
@@ -847,7 +874,11 @@ class ProgressiveTrainer:
                     f"⚖️ 自适应权重: 正样本 {self.adaptive_weights.get('pos', 1.0):.3f}, "
                     f"负样本 {self.adaptive_weights.get('neg', 1.0):.3f}"
                 )
-                
+
+        # 🔥 训练epoch结束后清理内存
+        self.memory_monitor.force_cleanup()
+        self.memory_monitor.log_memory_summary()
+
         return total_loss / max(num_batches, 1)
         
     def validate_epoch(self, data_loader: DataLoader) -> Dict[str, float]:

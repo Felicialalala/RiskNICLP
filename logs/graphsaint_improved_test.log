@@ -1,0 +1,117 @@
+2025-07-13 15:55:54,692 - INFO - 🚀 开始GraphSAINT改进指标测试...
+2025-07-13 15:55:54,710 - INFO - 🔄 开始加载真实5G-NIDD数据并创建改进标签...
+2025-07-13 15:55:54,710 - INFO - 📊 将测试 30 个图 (fine: 20, coarse: 10)
+2025-07-13 15:55:54,714 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200001.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,715 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200013.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,716 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200035.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,718 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200026.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,719 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200033.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,721 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200047.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,723 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200045.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,724 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200020.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,726 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200005.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,727 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200021.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,728 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200036.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,729 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200014.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,731 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200015.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,732 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200016.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,733 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200034.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,735 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200049.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,736 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200048.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,737 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200025.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,739 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200003.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,741 - WARNING - ⚠️ 处理图文件失败 hetero_graph_fine_t1663200046.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,752 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200090.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:54,756 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200120.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:56,040 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200240.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:56,760 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200210.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:56,768 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200150.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:56,775 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200010.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:56,781 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200020.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:56,787 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200060.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:58,602 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200230.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:58,648 - WARNING - ⚠️ 处理图文件失败 hetero_graph_coarse_t1663200200.dgl: Edge type name must be specified if there are more than one edge types.
+2025-07-13 15:55:58,649 - INFO - 🎉 成功加载 0 个图，包含改进的攻击标签
+2025-07-13 15:55:58,649 - ERROR - ❌ 没有成功加载任何图数据
+2025-07-13 16:02:21,256 - INFO - 🚀 开始GraphSAINT改进指标测试...
+2025-07-13 16:02:21,274 - INFO - 🔄 开始加载真实5G-NIDD数据并创建改进标签...
+2025-07-13 16:02:21,274 - INFO - 📊 将测试 30 个图 (fine: 20, coarse: 10)
+2025-07-13 16:02:30,007 - INFO - ✅ 已处理 10/30 个图
+2025-07-13 16:02:37,812 - INFO - ✅ 已处理 20/30 个图
+2025-07-13 16:37:12,760 - INFO - ✅ 已处理 30/30 个图
+2025-07-13 16:37:12,761 - INFO - 🎉 成功加载 30 个图，包含改进的攻击标签
+2025-07-13 16:37:12,761 - INFO - 🚀 开始GraphSAINT改进指标测试...
+2025-07-13 16:37:12,764 - INFO - 📊 开始测试 30 个图...
+2025-07-13 16:37:12,885 - INFO - 图 1/30: Hit@5=0.800, NDCG@10=0.826, AUC-PR=0.675
+2025-07-13 16:37:12,944 - INFO - 图 2/30: Hit@5=0.800, NDCG@10=0.826, AUC-PR=0.699
+2025-07-13 16:37:13,011 - INFO - 图 3/30: Hit@5=0.600, NDCG@10=0.693, AUC-PR=0.656
+2025-07-13 16:37:13,077 - INFO - 图 4/30: Hit@5=0.800, NDCG@10=0.707, AUC-PR=0.678
+2025-07-13 16:37:13,184 - INFO - 图 5/30: Hit@5=0.600, NDCG@10=0.476, AUC-PR=0.656
+2025-07-13 16:37:13,286 - INFO - 图 6/30: Hit@5=1.000, NDCG@10=0.927, AUC-PR=0.653
+2025-07-13 16:37:13,311 - INFO - 图 7/30: Hit@5=0.600, NDCG@10=0.592, AUC-PR=0.658
+2025-07-13 16:37:13,401 - INFO - 图 8/30: Hit@5=0.600, NDCG@10=0.622, AUC-PR=0.665
+2025-07-13 16:37:13,447 - INFO - 图 9/30: Hit@5=1.000, NDCG@10=0.922, AUC-PR=0.653
+2025-07-13 16:37:13,516 - INFO - 图 10/30: Hit@5=0.800, NDCG@10=0.628, AUC-PR=0.641
+2025-07-13 16:37:13,582 - INFO - 图 11/30: Hit@5=0.800, NDCG@10=0.697, AUC-PR=0.651
+2025-07-13 16:37:13,633 - INFO - 图 12/30: Hit@5=0.800, NDCG@10=0.642, AUC-PR=0.653
+2025-07-13 16:37:13,671 - INFO - 图 13/30: Hit@5=0.600, NDCG@10=0.621, AUC-PR=0.656
+2025-07-13 16:37:13,743 - INFO - 图 14/30: Hit@5=1.000, NDCG@10=0.794, AUC-PR=0.695
+2025-07-13 16:37:13,808 - INFO - 图 15/30: Hit@5=0.600, NDCG@10=0.609, AUC-PR=0.634
+2025-07-13 16:37:13,862 - INFO - 图 16/30: Hit@5=0.600, NDCG@10=0.542, AUC-PR=0.654
+2025-07-13 16:37:13,905 - INFO - 图 17/30: Hit@5=0.400, NDCG@10=0.681, AUC-PR=0.655
+2025-07-13 16:37:13,943 - INFO - 图 18/30: Hit@5=0.600, NDCG@10=0.435, AUC-PR=0.654
+2025-07-13 16:37:14,005 - INFO - 图 19/30: Hit@5=0.800, NDCG@10=0.699, AUC-PR=0.675
+2025-07-13 16:37:14,061 - INFO - 图 20/30: Hit@5=0.400, NDCG@10=0.442, AUC-PR=0.639
+2025-07-13 16:37:14,125 - INFO - 图 21/30: Hit@5=0.600, NDCG@10=0.553, AUC-PR=0.561
+2025-07-13 16:37:14,174 - INFO - 图 22/30: Hit@5=0.800, NDCG@10=0.502, AUC-PR=0.539
+2025-07-13 16:37:16,700 - INFO - 图 23/30: Hit@5=1.000, NDCG@10=0.794, AUC-PR=0.551
+2025-07-13 16:37:18,040 - INFO - 图 24/30: Hit@5=0.600, NDCG@10=0.558, AUC-PR=0.550
+2025-07-13 16:37:18,076 - INFO - 图 25/30: Hit@5=0.600, NDCG@10=0.558, AUC-PR=0.554
+2025-07-13 16:37:18,106 - INFO - 图 26/30: Hit@5=0.400, NDCG@10=0.593, AUC-PR=0.552
+2025-07-13 16:37:18,141 - INFO - 图 27/30: Hit@5=0.800, NDCG@10=0.637, AUC-PR=0.559
+2025-07-13 16:37:18,162 - INFO - 图 28/30: Hit@5=0.400, NDCG@10=0.316, AUC-PR=0.544
+2025-07-13 16:37:21,595 - INFO - 图 29/30: Hit@5=0.800, NDCG@10=0.632, AUC-PR=0.550
+2025-07-13 16:37:21,768 - INFO - 图 30/30: Hit@5=0.400, NDCG@10=0.445, AUC-PR=0.550
+2025-07-13 16:37:29,090 - INFO - 📊 详细结果已保存到: results/graphsaint_improved_metrics_results.json
+2025-07-13 16:37:29,090 - INFO - 🎉 GraphSAINT改进指标测试完成！
+2025-07-17 09:54:49,449 - INFO - 🚀 开始GraphSAINT改进指标测试...
+2025-07-17 09:54:49,467 - INFO - 🔄 开始加载真实5G-NIDD数据并创建改进标签...
+2025-07-17 09:54:49,468 - INFO - 📊 将测试 30 个图 (fine: 20, coarse: 10)
+2025-07-17 09:54:49,676 - INFO - ✅ 已处理 10/30 个图
+2025-07-17 09:54:49,863 - INFO - ✅ 已处理 20/30 个图
+2025-07-17 09:55:43,612 - INFO - ✅ 已处理 30/30 个图
+2025-07-17 09:55:43,612 - INFO - 🎉 成功加载 30 个图，包含改进的攻击标签
+2025-07-17 09:55:43,613 - INFO - 🚀 开始GraphSAINT改进指标测试...
+2025-07-17 09:55:43,615 - INFO - 📊 开始测试 30 个图...
+2025-07-17 09:55:43,671 - INFO - 图 1/30: Hit@5=0.600, NDCG@10=0.489, AUC-PR=0.564
+2025-07-17 09:55:43,751 - INFO - 图 2/30: Hit@5=0.600, NDCG@10=0.747, AUC-PR=0.648
+2025-07-17 09:55:43,840 - INFO - 图 3/30: Hit@5=0.600, NDCG@10=0.433, AUC-PR=0.594
+2025-07-17 09:55:43,920 - INFO - 图 4/30: Hit@5=0.400, NDCG@10=0.315, AUC-PR=0.580
+2025-07-17 09:55:44,024 - INFO - 图 5/30: Hit@5=0.400, NDCG@10=0.340, AUC-PR=0.656
+2025-07-17 09:55:44,103 - INFO - 图 6/30: Hit@5=0.600, NDCG@10=0.530, AUC-PR=0.589
+2025-07-17 09:55:44,154 - INFO - 图 7/30: Hit@5=0.800, NDCG@10=0.763, AUC-PR=0.613
+2025-07-17 09:55:44,249 - INFO - 图 8/30: Hit@5=1.000, NDCG@10=0.649, AUC-PR=0.647
+2025-07-17 09:55:44,307 - INFO - 图 9/30: Hit@5=0.200, NDCG@10=0.218, AUC-PR=0.559
+2025-07-17 09:55:44,409 - INFO - 图 10/30: Hit@5=0.400, NDCG@10=0.340, AUC-PR=0.630
+2025-07-17 09:55:44,507 - INFO - 图 11/30: Hit@5=0.400, NDCG@10=0.558, AUC-PR=0.592
+2025-07-17 09:55:44,573 - INFO - 图 12/30: Hit@5=0.600, NDCG@10=0.537, AUC-PR=0.636
+2025-07-17 09:55:44,674 - INFO - 图 13/30: Hit@5=0.800, NDCG@10=0.647, AUC-PR=0.633
+2025-07-17 09:55:44,710 - INFO - 图 14/30: Hit@5=0.200, NDCG@10=0.363, AUC-PR=0.721
+2025-07-17 09:55:44,797 - INFO - 图 15/30: Hit@5=0.400, NDCG@10=0.570, AUC-PR=0.607
+2025-07-17 09:55:44,895 - INFO - 图 16/30: Hit@5=0.600, NDCG@10=0.682, AUC-PR=0.617
+2025-07-17 09:55:44,984 - INFO - 图 17/30: Hit@5=0.800, NDCG@10=0.753, AUC-PR=0.635
+2025-07-17 09:55:45,083 - INFO - 图 18/30: Hit@5=0.200, NDCG@10=0.301, AUC-PR=0.626
+2025-07-17 09:55:45,183 - INFO - 图 19/30: Hit@5=0.600, NDCG@10=0.670, AUC-PR=0.603
+2025-07-17 09:55:45,254 - INFO - 图 20/30: Hit@5=0.600, NDCG@10=0.820, AUC-PR=0.665
+2025-07-17 09:55:45,285 - INFO - 图 21/30: Hit@5=0.600, NDCG@10=0.425, AUC-PR=0.482
+2025-07-17 09:55:45,308 - INFO - 图 22/30: Hit@5=0.400, NDCG@10=0.340, AUC-PR=0.526
+2025-07-17 09:55:47,676 - INFO - 图 23/30: Hit@5=0.400, NDCG@10=0.457, AUC-PR=0.483
+2025-07-17 09:55:49,273 - INFO - 图 24/30: Hit@5=0.200, NDCG@10=0.250, AUC-PR=0.464
+2025-07-17 09:55:49,315 - INFO - 图 25/30: Hit@5=0.200, NDCG@10=0.110, AUC-PR=0.490
+2025-07-17 09:55:49,485 - INFO - 图 26/30: Hit@5=0.400, NDCG@10=0.467, AUC-PR=0.541
+2025-07-17 09:55:49,615 - INFO - 图 27/30: Hit@5=0.200, NDCG@10=0.392, AUC-PR=0.478
+2025-07-17 09:55:49,656 - INFO - 图 28/30: Hit@5=0.800, NDCG@10=0.753, AUC-PR=0.512
+2025-07-17 09:55:53,244 - INFO - 图 29/30: Hit@5=0.400, NDCG@10=0.419, AUC-PR=0.515
+2025-07-17 09:55:53,407 - INFO - 图 30/30: Hit@5=0.400, NDCG@10=0.330, AUC-PR=0.535
+2025-07-17 09:56:00,952 - INFO - 📊 详细结果已保存到: results/graphsaint_improved_metrics_results.json
+2025-07-17 09:56:00,952 - INFO - 🎉 GraphSAINT改进指标测试完成！

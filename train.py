@@ -37,6 +37,7 @@ from src.common import (
     get_logger, configure_reproducible_environment
 )
 from src.data import FeatureProcessor, RiskVectorizer, RiskNICLPDataset
+from src.data.sampling_framework import UnifiedSamplingFramework, SamplingConfig
 from src.models import RiskNICLPModel, ProgressiveTrainer
 from src.evaluation import RiskNICLPEvaluator
 
@@ -304,7 +305,7 @@ def parse_arguments():
     parser.add_argument(
         "--config", "-c",
         type=str,
-        default="config/baseline_config.yaml",
+        default="config/riskniclp_config.yaml",
         help="Configuration file path"
     )
     
@@ -396,7 +397,7 @@ def prepare_data(config, logger):
         logger.logger.info(f"🎯 启用负采样策略: {strategy}, 负样本比例: {neg_ratio}:1")
         
         # Validate configuration
-        if strategy not in ['uniform', 'stratified', 'hard', 'semantic']:
+        if strategy not in ['uniform', 'stratified', 'hard', 'semantic', 'semantic_stratified']:
             logger.logger.warning(f"⚠️ 未知负采样策略: {strategy}, 将使用baseline")
             negative_sampler_config = None
     else:
@@ -404,8 +405,8 @@ def prepare_data(config, logger):
     
     # 🚀 Enhanced caching configuration
     enable_edge_label_cache = getattr(config.data, 'enable_edge_label_cache', True)
-    enable_sample_cache = getattr(config.data, 'enable_sample_cache', True)
-    sample_cache_config = getattr(config.data, 'sample_cache_config', {})
+    enable_sample_cache = getattr(config.data, 'enable_sample_cache', False)  # 🔥 修复：默认禁用采样缓存
+    sample_cache_config = getattr(config.data, 'sample_cache_config', {'max_cache_size_gb': 0.0})
     
     logger.logger.info(f"🚀 缓存配置: 边标签缓存={'启用' if enable_edge_label_cache else '禁用'}, "
                       f"采样缓存={'启用' if enable_sample_cache else '禁用'}")

@@ -1,0 +1,317 @@
+{
+  "per_graph_results": [
+    {
+      "graph_id": 0,
+      "num_nodes": 267,
+      "num_edges": 625,
+      "num_positive": 380,
+      "num_negative": 245,
+      "accuracy": 0.3952,
+      "avg_prediction": 0.44020405411720276,
+      "prediction_std": 0.0364140160381794
+    },
+    {
+      "graph_id": 1,
+      "num_nodes": 284,
+      "num_edges": 638,
+      "num_positive": 387,
+      "num_negative": 251,
+      "accuracy": 0.4216300940438871,
+      "avg_prediction": 0.44675198197364807,
+      "prediction_std": 0.04000796377658844
+    },
+    {
+      "graph_id": 2,
+      "num_nodes": 284,
+      "num_edges": 686,
+      "num_positive": 417,
+      "num_negative": 269,
+      "accuracy": 0.39212827988338195,
+      "avg_prediction": 0.4237319529056549,
+      "prediction_std": 0.0369461290538311
+    },
+    {
+      "graph_id": 3,
+      "num_nodes": 220,
+      "num_edges": 484,
+      "num_positive": 294,
+      "num_negative": 190,
+      "accuracy": 0.39669421487603307,
+      "avg_prediction": 0.43466928601264954,
+      "prediction_std": 0.03769846633076668
+    },
+    {
+      "graph_id": 4,
+      "num_nodes": 270,
+      "num_edges": 610,
+      "num_positive": 370,
+      "num_negative": 240,
+      "accuracy": 0.42131147540983604,
+      "avg_prediction": 0.44594985246658325,
+      "prediction_std": 0.03981281444430351
+    },
+    {
+      "graph_id": 5,
+      "num_nodes": 896,
+      "num_edges": 2425,
+      "num_positive": 1474,
+      "num_negative": 951,
+      "accuracy": 0.39298969072164947,
+      "avg_prediction": 0.41755586862564087,
+      "prediction_std": 0.032192230224609375
+    },
+    {
+      "graph_id": 6,
+      "num_nodes": 997,
+      "num_edges": 2812,
+      "num_positive": 1709,
+      "num_negative": 1103,
+      "accuracy": 0.3933143669985775,
+      "avg_prediction": 0.42316967248916626,
+      "prediction_std": 0.031364113092422485
+    },
+    {
+      "graph_id": 7,
+      "num_nodes": 259,
+      "num_edges": 597,
+      "num_positive": 362,
+      "num_negative": 235,
+      "accuracy": 0.40033500837520936,
+      "avg_prediction": 0.4346560835838318,
+      "prediction_std": 0.03747096657752991
+    },
+    {
+      "graph_id": 8,
+      "num_nodes": 400,
+      "num_edges": 1024,
+      "num_positive": 622,
+      "num_negative": 402,
+      "accuracy": 0.3955078125,
+      "avg_prediction": 0.42829036712646484,
+      "prediction_std": 0.03480949625372887
+    },
+    {
+      "graph_id": 9,
+      "num_nodes": 266,
+      "num_edges": 616,
+      "num_positive": 374,
+      "num_negative": 242,
+      "accuracy": 0.39285714285714285,
+      "avg_prediction": 0.4265725910663605,
+      "prediction_std": 0.03336289897561073
+    },
+    {
+      "graph_id": 10,
+      "num_nodes": 281,
+      "num_edges": 663,
+      "num_positive": 403,
+      "num_negative": 260,
+      "accuracy": 0.4117647058823529,
+      "avg_prediction": 0.4406401216983795,
+      "prediction_std": 0.03875252231955528
+    },
+    {
+      "graph_id": 11,
+      "num_nodes": 274,
+      "num_edges": 617,
+      "num_positive": 375,
+      "num_negative": 242,
+      "accuracy": 0.40032414910858993,
+      "avg_prediction": 0.4352990388870239,
+      "prediction_std": 0.0335613489151001
+    },
+    {
+      "graph_id": 12,
+      "num_nodes": 250,
+      "num_edges": 575,
+      "num_positive": 349,
+      "num_negative": 226,
+      "accuracy": 0.39652173913043476,
+      "avg_prediction": 0.44412514567375183,
+      "prediction_std": 0.03750459477305412
+    },
+    {
+      "graph_id": 13,
+      "num_nodes": 254,
+      "num_edges": 564,
+      "num_positive": 342,
+      "num_negative": 222,
+      "accuracy": 0.39893617021276595,
+      "avg_prediction": 0.42109787464141846,
+      "prediction_std": 0.033625081181526184
+    },
+    {
+      "graph_id": 14,
+      "num_nodes": 289,
+      "num_edges": 678,
+      "num_positive": 412,
+      "num_negative": 266,
+      "accuracy": 0.40117994100294985,
+      "avg_prediction": 0.43780723214149475,
+      "prediction_std": 0.03751736879348755
+    },
+    {
+      "graph_id": 15,
+      "num_nodes": 369,
+      "num_edges": 894,
+      "num_positive": 543,
+      "num_negative": 351,
+      "accuracy": 0.4172259507829978,
+      "avg_prediction": 0.44155269861221313,
+      "prediction_std": 0.04369683191180229
+    },
+    {
+      "graph_id": 16,
+      "num_nodes": 633,
+      "num_edges": 1662,
+      "num_positive": 1010,
+      "num_negative": 652,
+      "accuracy": 0.40673886883273164,
+      "avg_prediction": 0.422932505607605,
+      "prediction_std": 0.03974121809005737
+    },
+    {
+      "graph_id": 17,
+      "num_nodes": 230,
+      "num_edges": 524,
+      "num_positive": 318,
+      "num_negative": 206,
+      "accuracy": 0.3969465648854962,
+      "avg_prediction": 0.4395807981491089,
+      "prediction_std": 0.03591594845056534
+    },
+    {
+      "graph_id": 18,
+      "num_nodes": 303,
+      "num_edges": 699,
+      "num_positive": 424,
+      "num_negative": 275,
+      "accuracy": 0.41201716738197425,
+      "avg_prediction": 0.4370233714580536,
+      "prediction_std": 0.034855280071496964
+    },
+    {
+      "graph_id": 19,
+      "num_nodes": 1014,
+      "num_edges": 2848,
+      "num_positive": 1731,
+      "num_negative": 1117,
+      "accuracy": 0.39115168539325845,
+      "avg_prediction": 0.42120760679244995,
+      "prediction_std": 0.030656101182103157
+    },
+    {
+      "graph_id": 20,
+      "num_nodes": 756,
+      "num_edges": 2052,
+      "num_positive": 1247,
+      "num_negative": 805,
+      "accuracy": 0.39473684210526316,
+      "avg_prediction": 0.41632285714149475,
+      "prediction_std": 0.03407927230000496
+    },
+    {
+      "graph_id": 21,
+      "num_nodes": 926,
+      "num_edges": 2565,
+      "num_positive": 1559,
+      "num_negative": 1006,
+      "accuracy": 0.39649122807017545,
+      "avg_prediction": 0.42583921551704407,
+      "prediction_std": 0.03332163393497467
+    },
+    {
+      "graph_id": 22,
+      "num_nodes": 1747,
+      "num_edges": 5031,
+      "num_positive": 3058,
+      "num_negative": 1973,
+      "accuracy": 0.3945537666467899,
+      "avg_prediction": 0.4257948398590088,
+      "prediction_std": 0.028090395033359528
+    },
+    {
+      "graph_id": 23,
+      "num_nodes": 450,
+      "num_edges": 1135,
+      "num_positive": 690,
+      "num_negative": 445,
+      "accuracy": 0.39823788546255506,
+      "avg_prediction": 0.4211929738521576,
+      "prediction_std": 0.03798295557498932
+    },
+    {
+      "graph_id": 24,
+      "num_nodes": 305,
+      "num_edges": 679,
+      "num_positive": 412,
+      "num_negative": 267,
+      "accuracy": 0.4108983799705449,
+      "avg_prediction": 0.4420686364173889,
+      "prediction_std": 0.037857551127672195
+    },
+    {
+      "graph_id": 25,
+      "num_nodes": 252,
+      "num_edges": 567,
+      "num_positive": 344,
+      "num_negative": 223,
+      "accuracy": 0.4074074074074074,
+      "avg_prediction": 0.44036537408828735,
+      "prediction_std": 0.03793603181838989
+    },
+    {
+      "graph_id": 26,
+      "num_nodes": 285,
+      "num_edges": 628,
+      "num_positive": 381,
+      "num_negative": 247,
+      "accuracy": 0.410828025477707,
+      "avg_prediction": 0.4399721622467041,
+      "prediction_std": 0.03650079667568207
+    },
+    {
+      "graph_id": 27,
+      "num_nodes": 1313,
+      "num_edges": 3715,
+      "num_positive": 2258,
+      "num_negative": 1457,
+      "accuracy": 0.39407806191117095,
+      "avg_prediction": 0.4240553081035614,
+      "prediction_std": 0.03532623499631882
+    },
+    {
+      "graph_id": 28,
+      "num_nodes": 303,
+      "num_edges": 663,
+      "num_positive": 403,
+      "num_negative": 260,
+      "accuracy": 0.3996983408748115,
+      "avg_prediction": 0.4389588534832001,
+      "prediction_std": 0.03451712429523468
+    },
+    {
+      "graph_id": 29,
+      "num_nodes": 289,
+      "num_edges": 657,
+      "num_positive": 399,
+      "num_negative": 258,
+      "accuracy": 0.410958904109589,
+      "avg_prediction": 0.4398324489593506,
+      "prediction_std": 0.03883134201169014
+    }
+  ],
+  "overall_metrics": {
+    "accuracy": 0.3984393535971318,
+    "auc_roc": 0.5012499692416564,
+    "auc_pr": 0.6078176200691003,
+    "total_samples": 37933,
+    "avg_prediction": 0.4278182089328766,
+    "prediction_std": 0.03542815148830414
+  },
+  "model_info": {
+    "hidden_dim": 64,
+    "num_layers": 3,
+    "sampling_coverage": 0.4
+  }
+}

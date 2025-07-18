@@ -39,12 +39,12 @@ class EdgeLabelCache:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # 默认语义配置
+        # 🚀 攻击链路预测：重新设计的正样本比例配置
         self.semantic_config = semantic_config or {
-            'triggers': {'pos_ratio': 0.8, 'desc': 'Flow->Alert高风险传播'},
-            'initiates': {'pos_ratio': 0.4, 'desc': 'UE->Flow中风险发起'},
-            'temporal_adj': {'pos_ratio': 0.15, 'desc': 'Flow->Flow时序关联'},
-            'default': {'pos_ratio': 0.1, 'desc': '其他边类型'}
+            'triggers': {'pos_ratio': 0.35, 'desc': 'Flow->Alert 35%攻击告警触发预测'},
+            'initiates': {'pos_ratio': 0.30, 'desc': 'UE->Flow 30%攻击发起预测'},
+            'temporal_adj': {'pos_ratio': 0.25, 'desc': 'Flow->Flow 25%攻击传播预测'},
+            'default': {'pos_ratio': 0.20, 'desc': '其他边类型 20%基础攻击关联'}
         }
         
         self.logger = get_logger("EdgeLabelCache").logger
@@ -408,7 +408,7 @@ class PositiveNegativeSampleCache(EdgeLabelCache):
         
         self.max_cache_size_gb = max_cache_size_gb
         self.compression_enabled = compression_enabled
-        self.cache_version = "1.0"
+        self.cache_version = "2.0_pyramid"  # 🔥 强制更新：三层金字塔采样版本
         
         # 采样缓存索引
         self.sample_cache_index = {}

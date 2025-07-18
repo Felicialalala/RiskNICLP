@@ -283,11 +283,12 @@ class SimplifiedRiskBiasGAT(nn.Module):
             features: 节点特征 [num_nodes, in_feats]
             risk_scores: 风险分数 [num_nodes] (可选)
         """
-        if risk_scores is not None:
-            # 使用完全修复版真正的风险偏置注意力
+        # 🔥 内存优化：简化风险偏置计算
+        if risk_scores is not None and hasattr(self, 'training_phase') and getattr(self, 'training_phase', 'basic') == 'risk_aware':
+            # 只在风险感知阶段使用复杂的风险偏置
             return self.risk_bias_gat(graph, features, risk_scores)
         else:
-            # 🔧 修复6: 使用预初始化的fallback GAT，避免重复创建
+            # 🔧 基础阶段或无风险分数时使用简单GAT
             h = self.risk_bias_gat.gat_fallback(graph, features)
             return h.mean(dim=1) if len(h.shape) == 3 else h
 

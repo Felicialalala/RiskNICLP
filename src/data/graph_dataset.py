@@ -62,27 +62,28 @@ class RiskNICLPDataset(Dataset):
         
         # Default sample cache configuration
         default_sample_cache_config = {
-            'max_cache_size_gb': 10.0,
-            'compression_enabled': True
+            'max_cache_size_gb': 0.0,  # 🔥 修复：默认禁用缓存
+            'compression_enabled': False  # 🔥 修复：默认禁用压缩
         }
         if sample_cache_config is None:
             sample_cache_config = default_sample_cache_config
         else:
+            # 🔥 修复：优先使用用户配置，不被默认值覆盖
             sample_cache_config = {**default_sample_cache_config, **sample_cache_config}
         
         if enable_edge_label_cache or enable_sample_cache:
             cache_dir = Path(graph_dir).parent / "edge_label_cache"
             sample_cache_dir = Path(graph_dir).parent / "sample_cache"
             
-            # Use enhanced cache system
+            # Use enhanced cache system with attack propagation ratios
             self.sample_cache = PositiveNegativeSampleCache(
                 cache_dir=str(cache_dir),
                 sample_cache_dir=str(sample_cache_dir),
                 semantic_config={
-                    'triggers': {'pos_ratio': 0.8, 'desc': 'Flow->Alert高风险传播'},
-                    'initiates': {'pos_ratio': 0.4, 'desc': 'UE->Flow中风险发起'},
-                    'temporal_adj': {'pos_ratio': 0.15, 'desc': 'Flow->Flow时序关联'},
-                    'default': {'pos_ratio': 0.1, 'desc': '其他边类型'}
+                    'triggers': {'pos_ratio': 0.35, 'desc': 'Flow->Alert 35%攻击告警触发预测'},
+                    'initiates': {'pos_ratio': 0.30, 'desc': 'UE->Flow 30%攻击发起预测'},
+                    'temporal_adj': {'pos_ratio': 0.25, 'desc': 'Flow->Flow 25%攻击传播预测'},
+                    'default': {'pos_ratio': 0.20, 'desc': '其他边类型 20%基础攻击关联'}
                 },
                 max_cache_size_gb=sample_cache_config['max_cache_size_gb'],
                 compression_enabled=sample_cache_config['compression_enabled']
@@ -584,15 +585,9 @@ class RiskNICLPDataset(Dataset):
                     num_etype_edges = len(src)
                     
                     if num_etype_edges > 0:
-                        # 基于边类型的正样本比例
-                        if etype == 'triggers':
-                            pos_ratio = 0.8
-                        elif etype == 'initiates':
-                            pos_ratio = 0.4
-                        elif etype == 'temporal_adj':
-                            pos_ratio = 0.15
-                        else:
-                            pos_ratio = 0.1
+                        # 🔥 使用正样本采样优化器
+                        from .positive_sampling_optimizer import optimize_positive_sampling
+                        pos_ratio = optimize_positive_sampling(etype)
                         
                         # 基于风险分数优选正样本
                         if len(src) > 0 and edge_offset + len(src) <= len(edge_risk_scores):

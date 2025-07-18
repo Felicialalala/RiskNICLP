@@ -1,13 +1,15 @@
 """
-Risk-aware evaluation metrics for RiskNICLP-5G
+Attack Propagation Prediction Metrics for RiskNICLP-5G
 
-Provides specialized metrics for security-oriented evaluation
+Provides specialized metrics for attack propagation prediction tasks
+Replaces anomaly detection metrics (AUC) with security-oriented evaluation
 """
 
 import numpy as np
 import torch
-from typing import Dict, List, Optional, Tuple
-from sklearn.metrics import roc_auc_score, average_precision_score
+from typing import Dict, List, Optional, Tuple, Union
+from sklearn.metrics import roc_auc_score, average_precision_score, precision_recall_curve
+import time
 
 
 class RiskAwareMetrics:
@@ -244,4 +246,305 @@ class SecurityMetrics:
         false_positives = np.sum(positive_mask & negative_mask)
         total_negatives = np.sum(negative_mask)
         
-        return false_positives / total_negatives 
+        return false_positives / total_negatives
+
+
+class AttackPropagationMetrics:
+    """
+    攻击链路预测专用评估指标
+    替代传统异常检测的AUC指标，专注于攻击预测的实际效果
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """重置指标累积器"""
+        self.predictions = []
+        self.targets = []
+        self.edge_types = []
+        self.timestamps = []
+        self.attack_types = []
+        self.risk_scores = []
+
+    def update(self, predictions: np.ndarray, targets: np.ndarray,
+               edge_types: Optional[np.ndarray] = None,
+               timestamps: Optional[np.ndarray] = None,
+               attack_types: Optional[np.ndarray] = None,
+               risk_scores: Optional[np.ndarray] = None):
+        """更新指标数据"""
+        self.predictions.extend(predictions.flatten())
+        self.targets.extend(targets.flatten())
+
+        if edge_types is not None:
+            self.edge_types.extend(edge_types.flatten())
+        if timestamps is not None:
+            self.timestamps.extend(timestamps.flatten())
+        if attack_types is not None:
+            self.attack_types.extend(attack_types.flatten())
+        if risk_scores is not None:
+            self.risk_scores.extend(risk_scores.flatten())
+
+    def compute_attack_prediction_accuracy(self, threshold: float = 0.5) -> float:
+        """
+        计算攻击边预测准确率
+        主要指标：正确预测攻击边的比例
+        """
+        predictions = np.array(self.predictions)
+        targets = np.array(self.targets)
+
+        predicted_positive = predictions > threshold
+        actual_positive = targets == 1
+
+        # 计算准确率
+        correct_predictions = (predicted_positive == actual_positive)
+        return np.mean(correct_predictions)
+
+    def compute_early_warning_effectiveness(self, warning_threshold: float = 0.7,
+                                          min_lead_time: float = 30.0) -> Dict[str, float]:
+        """
+        计算提前预警有效性
+        关键指标：成功提前预警的攻击比例
+        """
+        if len(self.timestamps) == 0:
+            return {'effectiveness': 0.0, 'avg_lead_time': 0.0, 'warning_count': 0}
+
+        predictions = np.array(self.predictions)
+        targets = np.array(self.targets)
+        timestamps = np.array(self.timestamps)
+
+        # 高置信度预警
+        warning_mask = predictions > warning_threshold
+        attack_mask = targets == 1
+
+        successful_warnings = 0
+        total_attacks = np.sum(attack_mask)
+        lead_times = []
+
+        if total_attacks == 0:
+            return {'effectiveness': 0.0, 'avg_lead_time': 0.0, 'warning_count': 0}
+
+        # 计算每个攻击的预警效果
+        attack_indices = np.where(attack_mask)[0]
+        warning_indices = np.where(warning_mask)[0]
+
+        for attack_idx in attack_indices:
+            attack_time = timestamps[attack_idx]
+
+            # 查找该攻击之前的预警
+            prior_warnings = warning_indices[timestamps[warning_indices] < attack_time]
+
+            if len(prior_warnings) > 0:
+                # 找到最近的预警
+                latest_warning_idx = prior_warnings[np.argmax(timestamps[prior_warnings])]
+                lead_time = attack_time - timestamps[latest_warning_idx]
+
+                if lead_time >= min_lead_time:
+                    successful_warnings += 1
+                    lead_times.append(lead_time)
+
+        effectiveness = successful_warnings / total_attacks
+        avg_lead_time = np.mean(lead_times) if lead_times else 0.0
+
+        return {
+            'effectiveness': effectiveness,
+            'avg_lead_time': avg_lead_time,
+            'warning_count': len(warning_indices),
+            'successful_warnings': successful_warnings,
+            'total_attacks': total_attacks
+        }
+
+    def compute_attack_chain_completeness(self) -> Dict[str, float]:
+        """
+        计算攻击链完整性
+        衡量完整预测攻击传播路径的能力
+        """
+        if len(self.edge_types) == 0:
+            return {'completeness': 0.0, 'chain_coverage': 0.0}
+
+        predictions = np.array(self.predictions)
+        targets = np.array(self.targets)
+        edge_types = np.array(self.edge_types)
+
+        # 按边类型分组计算
+        edge_type_performance = {}
+        for edge_type in ['initiates', 'triggers', 'temporal_adj']:
+            type_mask = edge_types == edge_type
+            if np.any(type_mask):
+                type_predictions = predictions[type_mask]
+                type_targets = targets[type_mask]
+
+                # 计算该边类型的召回率
+                type_recall = self._compute_recall(type_predictions, type_targets)
+                edge_type_performance[edge_type] = type_recall
+
+        # 攻击链完整性 = 所有边类型召回率的几何平均
+        if edge_type_performance:
+            recalls = list(edge_type_performance.values())
+            completeness = np.prod(recalls) ** (1.0 / len(recalls))
+        else:
+            completeness = 0.0
+
+        # 链路覆盖率 = 至少预测到一种边类型的攻击比例
+        chain_coverage = max(edge_type_performance.values()) if edge_type_performance else 0.0
+
+        return {
+            'completeness': completeness,
+            'chain_coverage': chain_coverage,
+            'edge_type_performance': edge_type_performance
+        }
+
+    def compute_threat_escalation_precision(self, escalation_threshold: float = 0.2) -> float:
+        """
+        计算威胁升级预测精度
+        衡量准确预测攻击强度升级的能力
+        """
+        if len(self.risk_scores) == 0:
+            return 0.0
+
+        predictions = np.array(self.predictions)
+        risk_scores = np.array(self.risk_scores)
+
+        # 识别威胁升级：风险分数显著增加
+        risk_increases = np.diff(risk_scores)
+        escalation_mask = risk_increases > escalation_threshold
+
+        if not np.any(escalation_mask):
+            return 0.0
+
+        # 计算预测到威胁升级的精度
+        escalation_predictions = predictions[1:][escalation_mask]
+        correct_escalation_predictions = np.sum(escalation_predictions > 0.5)
+
+        return correct_escalation_predictions / len(escalation_predictions)
+
+    def compute_false_alarm_rate(self, threshold: float = 0.5) -> float:
+        """
+        计算误报率 (SOC关键指标)
+        错误攻击预警的比例
+        """
+        predictions = np.array(self.predictions)
+        targets = np.array(self.targets)
+
+        predicted_positive = predictions > threshold
+        actual_negative = targets == 0
+
+        if not np.any(actual_negative):
+            return 0.0
+
+        false_alarms = np.sum(predicted_positive & actual_negative)
+        total_negatives = np.sum(actual_negative)
+
+        return false_alarms / total_negatives
+
+    def compute_attack_type_discrimination(self) -> Dict[str, float]:
+        """
+        计算攻击类型区分能力
+        不同攻击类型的预测准确率
+        """
+        if len(self.attack_types) == 0:
+            return {}
+
+        predictions = np.array(self.predictions)
+        targets = np.array(self.targets)
+        attack_types = np.array(self.attack_types)
+
+        type_performance = {}
+        unique_types = np.unique(attack_types)
+
+        for attack_type in unique_types:
+            type_mask = attack_types == attack_type
+            if np.any(type_mask):
+                type_predictions = predictions[type_mask]
+                type_targets = targets[type_mask]
+
+                # 计算F1分数
+                f1_score = self._compute_f1_score(type_predictions, type_targets)
+                type_performance[str(attack_type)] = f1_score
+
+        return type_performance
+
+    def compute_temporal_prediction_stability(self, window_size: int = 10) -> float:
+        """
+        计算时序预测稳定性
+        连续时间窗口预测结果的一致性
+        """
+        if len(self.timestamps) < window_size * 2:
+            return 0.0
+
+        predictions = np.array(self.predictions)
+        timestamps = np.array(self.timestamps)
+
+        # 按时间排序
+        sorted_indices = np.argsort(timestamps)
+        sorted_predictions = predictions[sorted_indices]
+
+        # 计算滑动窗口的预测一致性
+        correlations = []
+        for i in range(len(sorted_predictions) - window_size):
+            window1 = sorted_predictions[i:i+window_size]
+            window2 = sorted_predictions[i+1:i+1+window_size]
+
+            # 计算相关性
+            correlation = np.corrcoef(window1, window2)[0, 1]
+            if not np.isnan(correlation):
+                correlations.append(correlation)
+
+        return np.mean(correlations) if correlations else 0.0
+
+    def _compute_recall(self, predictions: np.ndarray, targets: np.ndarray,
+                       threshold: float = 0.5) -> float:
+        """计算召回率"""
+        predicted_positive = predictions > threshold
+        actual_positive = targets == 1
+
+        if not np.any(actual_positive):
+            return 0.0
+
+        true_positives = np.sum(predicted_positive & actual_positive)
+        return true_positives / np.sum(actual_positive)
+
+    def _compute_f1_score(self, predictions: np.ndarray, targets: np.ndarray,
+                         threshold: float = 0.5) -> float:
+        """计算F1分数"""
+        predicted_positive = predictions > threshold
+        actual_positive = targets == 1
+
+        if not np.any(actual_positive) and not np.any(predicted_positive):
+            return 1.0
+        if not np.any(actual_positive) or not np.any(predicted_positive):
+            return 0.0
+
+        true_positives = np.sum(predicted_positive & actual_positive)
+        false_positives = np.sum(predicted_positive & ~actual_positive)
+        false_negatives = np.sum(~predicted_positive & actual_positive)
+
+        precision = true_positives / (true_positives + false_positives + 1e-8)
+        recall = true_positives / (true_positives + false_negatives + 1e-8)
+
+        return 2 * precision * recall / (precision + recall + 1e-8)
+
+    def compute_comprehensive_report(self) -> Dict[str, Union[float, Dict]]:
+        """
+        计算综合评估报告
+        包含所有攻击预测专用指标
+        """
+        report = {
+            # 主要指标
+            'attack_prediction_accuracy': self.compute_attack_prediction_accuracy(),
+            'early_warning_effectiveness': self.compute_early_warning_effectiveness(),
+            'attack_chain_completeness': self.compute_attack_chain_completeness(),
+            'threat_escalation_precision': self.compute_threat_escalation_precision(),
+
+            # 运营指标
+            'false_alarm_rate': self.compute_false_alarm_rate(),
+            'attack_type_discrimination': self.compute_attack_type_discrimination(),
+            'temporal_prediction_stability': self.compute_temporal_prediction_stability(),
+
+            # 统计信息
+            'total_samples': len(self.predictions),
+            'positive_ratio': np.mean(self.targets) if self.targets else 0.0,
+            'prediction_confidence': np.mean(self.predictions) if self.predictions else 0.0
+        }
+
+        return report

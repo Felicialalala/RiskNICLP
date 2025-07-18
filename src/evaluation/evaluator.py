@@ -38,6 +38,10 @@ class RiskNICLPEvaluator:
         self.risk_metrics = RiskAwareMetrics()
         self.directional_metrics = DirectionalMetrics()
         self.temporal_metrics = TemporalMetrics()
+
+        # 🚀 新增：攻击链路预测专用指标
+        from .metrics import AttackPropagationMetrics
+        self.attack_metrics = AttackPropagationMetrics()
         
         # Prediction storage
         self.predictions = []
@@ -45,6 +49,10 @@ class RiskNICLPEvaluator:
         self.risk_scores = []
         self.timestamps = []
         self.directions = []
+
+        # 🚀 新增：攻击预测相关数据存储
+        self.edge_types = []
+        self.attack_types = []
         
     def evaluate(self, data_loader: DataLoader, split_name: str = "test", save_results: bool = True) -> Dict[str, float]:
         """
@@ -135,12 +143,30 @@ class RiskNICLPEvaluator:
                     
                     # Store predictions (only if we have valid data)
                     if len(predictions) > 0 and len(targets) > 0:
+                        # 🚀 尝试从batch中提取边类型和攻击类型信息
+                        edge_types = None
+                        attack_types = None
+
+                        # 如果batch中有边类型信息
+                        if hasattr(batch, 'edge_type') and batch.edge_type is not None:
+                            edge_types = batch.edge_type
+                        elif 'edge_type' in batch:
+                            edge_types = batch['edge_type']
+
+                        # 如果batch中有攻击类型信息
+                        if hasattr(batch, 'attack_type') and batch.attack_type is not None:
+                            attack_types = batch.attack_type
+                        elif 'attack_type' in batch:
+                            attack_types = batch['attack_type']
+
                         self._update_predictions(
                             predictions=predictions,
                             targets=targets,
                             risk_scores=risk_scores,
                             timestamps=timestamps,
-                            directions=directions
+                            directions=directions,
+                            edge_types=edge_types,
+                            attack_types=attack_types
                         )
                     
                 except Exception as e:
@@ -166,10 +192,17 @@ class RiskNICLPEvaluator:
         self.risk_scores = []
         self.timestamps = []
         self.directions = []
-        
+
+        # 🚀 新增：重置攻击预测相关数据
+        self.edge_types = []
+        self.attack_types = []
+
         self.risk_metrics.reset()
         self.directional_metrics.reset()
         self.temporal_metrics.reset()
+
+        # 🚀 新增：重置攻击预测指标
+        self.attack_metrics.reset()
     
     def _move_batch_to_device(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         """Move batch data to device"""
@@ -181,15 +214,39 @@ class RiskNICLPEvaluator:
                 device_batch[key] = value
         return device_batch
     
-    def _update_predictions(self, predictions: torch.Tensor, targets: torch.Tensor, 
-                          risk_scores: torch.Tensor, timestamps: torch.Tensor, 
-                          directions: torch.Tensor):
+    def _update_predictions(self, predictions: torch.Tensor, targets: torch.Tensor,
+                          risk_scores: torch.Tensor, timestamps: torch.Tensor,
+                          directions: torch.Tensor, edge_types: torch.Tensor = None,
+                          attack_types: torch.Tensor = None):
         """Update prediction storage"""
         self.predictions.extend(predictions.cpu().numpy())
         self.targets.extend(targets.cpu().numpy())
         self.risk_scores.extend(risk_scores.cpu().numpy())
         self.timestamps.extend(timestamps.cpu().numpy())
         self.directions.extend(directions.cpu().numpy())
+
+        # 🚀 新增：更新攻击预测相关数据
+        if edge_types is not None:
+            self.edge_types.extend(edge_types.cpu().numpy())
+        else:
+            # 默认边类型（可以根据实际情况调整）
+            self.edge_types.extend(['unknown'] * len(predictions))
+
+        if attack_types is not None:
+            self.attack_types.extend(attack_types.cpu().numpy())
+        else:
+            # 默认攻击类型
+            self.attack_types.extend(['unknown'] * len(predictions))
+
+        # 🚀 更新攻击预测指标累积器
+        self.attack_metrics.update(
+            predictions=predictions.cpu().numpy(),
+            targets=targets.cpu().numpy(),
+            edge_types=np.array(self.edge_types[-len(predictions):]),
+            timestamps=timestamps.cpu().numpy(),
+            attack_types=np.array(self.attack_types[-len(predictions):]),
+            risk_scores=risk_scores.cpu().numpy()
+        )
     
     def _compute_all_metrics(self) -> Dict[str, float]:
         """Compute all evaluation metrics organized by priority"""
@@ -226,13 +283,29 @@ class RiskNICLPEvaluator:
         except Exception as e:
             self.logger.logger.warning(f"P2 metrics computation failed: {e}")
         
-        # P3: Traditional Metrics
+        # P3: Traditional Metrics (AUC - for comparison only)
         try:
             p3_metrics = self._compute_p3_metrics(predictions, targets)
             results.update({f"p3_{k}": v for k, v in p3_metrics.items()})
         except Exception as e:
             self.logger.logger.warning(f"P3 metrics computation failed: {e}")
-        
+
+        # 🚀 Attack Propagation Metrics (Primary for attack prediction task)
+        try:
+            attack_metrics = self._compute_attack_propagation_metrics()
+            results.update({f"attack_{k}": v for k, v in attack_metrics.items()})
+
+            # 将主要攻击预测指标提升到顶级
+            if 'attack_prediction_accuracy' in attack_metrics:
+                results['accuracy'] = attack_metrics['attack_prediction_accuracy']
+            if 'early_warning_effectiveness' in attack_metrics:
+                results['early_warning'] = attack_metrics['early_warning_effectiveness']
+            if 'false_alarm_rate' in attack_metrics:
+                results['false_alarm_rate'] = attack_metrics['false_alarm_rate']
+
+        except Exception as e:
+            self.logger.logger.warning(f"Attack propagation metrics computation failed: {e}")
+
         # Negative Sampling Metrics (if enabled)
         try:
             negative_sampling_metrics = self._compute_negative_sampling_metrics(predictions, targets)
@@ -610,4 +683,86 @@ class RiskNICLPEvaluator:
                     json.dump(simple_results, f, indent=2)
                 self.logger.logger.info(f"💾 Simplified evaluation results saved to {output_file}")
             except Exception as e2:
-                self.logger.logger.error(f"Failed to save even simplified results: {e2}") 
+                self.logger.logger.error(f"Failed to save even simplified results: {e2}")
+
+    def _compute_attack_propagation_metrics(self) -> Dict[str, float]:
+        """
+        计算攻击链路预测专用指标
+        替代传统的AUC指标，专注于攻击预测的实际效果
+        """
+        # 获取攻击预测指标的综合报告
+        attack_report = self.attack_metrics.compute_comprehensive_report()
+
+        # 提取主要指标
+        metrics = {}
+
+        # 主要指标
+        metrics['attack_prediction_accuracy'] = attack_report.get('attack_prediction_accuracy', 0.0)
+
+        # 提前预警指标
+        early_warning = attack_report.get('early_warning_effectiveness', {})
+        if isinstance(early_warning, dict):
+            metrics['early_warning_effectiveness'] = early_warning.get('effectiveness', 0.0)
+            metrics['avg_lead_time'] = early_warning.get('avg_lead_time', 0.0)
+            metrics['successful_warnings'] = early_warning.get('successful_warnings', 0)
+            metrics['total_attacks'] = early_warning.get('total_attacks', 0)
+        else:
+            metrics['early_warning_effectiveness'] = float(early_warning) if early_warning else 0.0
+            metrics['avg_lead_time'] = 0.0
+            metrics['successful_warnings'] = 0
+            metrics['total_attacks'] = 0
+
+        # 攻击链完整性指标
+        chain_completeness = attack_report.get('attack_chain_completeness', {})
+        if isinstance(chain_completeness, dict):
+            metrics['attack_chain_completeness'] = chain_completeness.get('completeness', 0.0)
+            metrics['chain_coverage'] = chain_completeness.get('chain_coverage', 0.0)
+
+            # 边类型性能
+            edge_performance = chain_completeness.get('edge_type_performance', {})
+            for edge_type, performance in edge_performance.items():
+                metrics[f'edge_{edge_type}_recall'] = performance
+        else:
+            metrics['attack_chain_completeness'] = float(chain_completeness) if chain_completeness else 0.0
+            metrics['chain_coverage'] = 0.0
+
+        # 威胁升级精度
+        metrics['threat_escalation_precision'] = attack_report.get('threat_escalation_precision', 0.0)
+
+        # 运营指标
+        metrics['false_alarm_rate'] = attack_report.get('false_alarm_rate', 0.0)
+        metrics['temporal_prediction_stability'] = attack_report.get('temporal_prediction_stability', 0.0)
+
+        # 攻击类型区分能力
+        attack_type_discrimination = attack_report.get('attack_type_discrimination', {})
+        if isinstance(attack_type_discrimination, dict):
+            for attack_type, f1_score in attack_type_discrimination.items():
+                metrics[f'attack_type_{attack_type}_f1'] = f1_score
+
+            # 计算平均攻击类型区分能力
+            if attack_type_discrimination:
+                metrics['avg_attack_type_discrimination'] = np.mean(list(attack_type_discrimination.values()))
+            else:
+                metrics['avg_attack_type_discrimination'] = 0.0
+
+        # 统计信息
+        metrics['total_samples'] = attack_report.get('total_samples', 0)
+        metrics['positive_ratio'] = attack_report.get('positive_ratio', 0.0)
+        metrics['prediction_confidence'] = attack_report.get('prediction_confidence', 0.0)
+
+        # 计算综合攻击预测分数
+        # 基于主要指标的加权平均
+        primary_score = (
+            metrics['attack_prediction_accuracy'] * 0.25 +
+            metrics['early_warning_effectiveness'] * 0.30 +
+            metrics['attack_chain_completeness'] * 0.25 +
+            metrics['threat_escalation_precision'] * 0.20
+        )
+
+        # 考虑运营指标的惩罚
+        operational_penalty = metrics['false_alarm_rate'] * 0.5  # 误报率惩罚
+        stability_bonus = metrics['temporal_prediction_stability'] * 0.1  # 稳定性奖励
+
+        metrics['overall_attack_prediction_score'] = max(0.0, primary_score - operational_penalty + stability_bonus)
+
+        return metrics

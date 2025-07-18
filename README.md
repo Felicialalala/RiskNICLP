@@ -17,37 +17,67 @@ RiskNICLP-5G是一个风险感知的异质图神经网络模型，专门用于5G
 - **CPU优化**: 针对CPU环境的高效实现
 - **工程化**: 完整的MLOps流程和监控体系
 
-## 🏗️ 项目结构
+## 🏗️ 项目结构 (重构后)
 
 ```
 5g-nidd-project/
 ├── config/
-│   └── baseline_config.yaml      # 基础配置文件
+│   └── riskniclp_config.yaml    # 统一配置文件 (重构后)
 ├── src/
-│   ├── common/                   # 基础设施
-│   │   ├── logger.py            # 统一日志监控
-│   │   ├── config.py            # 多层配置管理
-│   │   ├── reproducibility.py   # 可重现性保障
-│   │   └── validators.py        # 数据验证框架
-│   ├── data/                    # 数据处理
+│   ├── common/                  # 基础设施
+│   │   ├── logger.py           # 统一日志监控
+│   │   ├── config.py           # 配置管理
+│   │   ├── reproducibility.py  # 可重现性保障
+│   │   └── validators.py       # 数据验证框架
+│   ├── data/                   # 数据处理 (重构后)
 │   │   ├── feature_processor.py # 特征选择(112→45维)
-│   │   ├── graph_dataset.py     # 图数据加载
-│   │   └── cache_manager.py     # CSR缓存管理
-│   ├── models/                  # 模型架构
-│   │   ├── encoders.py          # 共享编码器(GAT+GraphSAGE+GRU)
-│   │   ├── decoders.py          # RiskGravity解码器
-│   │   ├── risk_integration.py  # 风险集成模块
-│   │   ├── riskniclp_model.py   # 完整模型
-│   │   └── training.py          # 渐进训练框架
-│   └── evaluation/              # 评估模块
-│       ├── metrics.py           # 安全导向指标
-│       └── evaluator.py         # 评估器
-├── data/processed/              # 预处理数据
-│   ├── graphs/                  # 75个DGL异质图
-│   └── metadata/               # 元数据和报告
-├── train.py                     # 主训练脚本
-├── requirements.txt             # 项目依赖
-└── README.md                   # 本文件
+│   │   ├── graph_dataset.py    # 图数据加载
+│   │   ├── cache_manager.py    # CSR缓存管理
+│   │   ├── sampling_framework.py # 统一采样框架 (新)
+│   │   ├── edge_label_cache.py # 边标签缓存
+│   │   └── data_splits.py      # 数据分割
+│   ├── models/                 # 模型架构
+│   │   ├── encoders.py         # 编码器(GAT+GraphSAGE+GRU)
+│   │   ├── decoders.py         # RiskGravity解码器
+│   │   ├── risk_integration.py # 风险集成模块
+│   │   ├── riskniclp_model.py  # 完整模型
+│   │   └── training.py         # 训练框架
+│   ├── evaluation/             # 评估模块
+│   │   ├── metrics.py          # 评估指标
+│   │   └── evaluator.py        # 评估器
+│   └── training/               # 训练模块
+│       ├── losses.py           # 损失函数
+│       └── progressive_trainer.py # 渐进训练
+├── data/                       # 数据目录
+│   ├── processed/              # 预处理数据
+│   │   ├── graphs/            # 75个DGL异质图
+│   │   └── metadata/          # 元数据和报告
+│   ├── raw/                   # 原始数据
+│   └── csr_cache/             # CSR缓存
+├── docs/                      # 文档 (重构后)
+│   ├── README.md              # 文档中心
+│   ├── RiskNICLP-5G_Design.md # 项目设计
+│   └── ...                    # 其他核心文档
+├── scripts/                   # 工具脚本
+│   ├── memory_optimized_ppr.py # PPR计算
+│   ├── risk_data_loader.py    # 风险数据加载
+│   └── risk_weight_mapping_complete.py # 风险权重映射
+├── tools/                     # 管理工具
+│   ├── cache_manager.py       # 缓存管理工具
+│   └── memory_monitor.py      # 内存监控
+├── tests/                     # 测试 (精简后)
+│   ├── test_implementation.py # 核心实现测试
+│   ├── test_phase2_implementation.py # Phase2测试
+│   └── test_sample_cache.py   # 缓存测试
+├── notebooks/                 # Jupyter笔记本
+│   ├── 01_data_exploration.ipynb
+│   └── ...                    # 数据分析笔记本
+├── logs/                      # 日志 (清理后)
+│   └── RiskNICLP-5G.log      # 主要日志
+├── outputs/                   # 输出目录
+├── train.py                   # 主训练脚本
+├── requirements.txt           # 项目依赖
+└── README.md                  # 项目说明
 ```
 
 ## 🚀 快速开始
@@ -78,26 +108,28 @@ ls data/processed/metadata/      # 应包含各阶段报告
 
 如果数据未准备好，请先运行数据处理pipeline (参考`docs/PIPELINE_EXECUTION_SUMMARY.md`)。
 
-### 3. 基础训练
+### 3. 基础训练 (重构后)
 
 ```bash
-# 基础训练 - 使用默认配置
+# 基础训练 - 使用重构后的统一配置
 python train.py
 
 # 使用自定义配置
-python train.py --config config/baseline_config.yaml
+python train.py --config config/riskniclp_config.yaml
 
 # 调试模式 - 快速验证
 python train.py --debug
 
 # 指定实验名称
-python train.py --experiment-name "my_baseline_experiment"
+python train.py --experiment-name "riskniclp_baseline"
 
 # 干运行 - 验证配置无误
 python train.py --dry-run
 ```
 
-### 4. 配置参数
+### 4. 配置参数 (重构后)
+
+主要配置文件：`config/riskniclp_config.yaml` (重构后的统一配置)
 
 核心参数可通过配置文件或命令行调整：
 
@@ -113,6 +145,12 @@ export RISKNICLP_BATCH_SIZE=8
 export RISKNICLP_MAX_EPOCHS=30
 python train.py
 ```
+
+**重构后的主要改进**：
+- 统一的采样配置 (negative_ratio, hard_negative_ratio等)
+- 清晰的模型架构配置 (encoders, decoder分离)
+- 完整的训练策略配置 (loss_weights, early_stopping等)
+- 禁用采样缓存确保每epoch重新采样
 
 ## 📊 模型架构
 

@@ -1,13 +1,15 @@
 """
-RiskNICLP-5G Loss Functions
+RiskNICLP-5G Loss Functions for Attack Propagation Prediction
 
-Includes BCE loss, focal loss, and InfoNCE contrastive loss for risk-aware training
+Includes specialized loss functions for attack propagation prediction tasks
+Replaces anomaly detection losses with attack-focused objectives
 """
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
+import numpy as np
 
 
 class RiskAwareBCELoss(nn.Module):
@@ -208,4 +210,234 @@ class CombinedLoss(nn.Module):
             'total_loss': total_loss.item()
         }
         
-        return total_loss, loss_dict 
+        return total_loss, loss_dict
+
+
+class AttackPropagationLoss(nn.Module):
+    """
+    攻击传播预测专用损失函数
+    专门针对攻击链路预测任务设计，替代传统的异常检测损失
+    """
+
+    def __init__(self,
+                 base_weight: float = 1.0,
+                 temporal_weight: float = 0.3,
+                 propagation_weight: float = 0.4,
+                 early_warning_weight: float = 0.5,
+                 false_alarm_penalty: float = 2.0):
+        """
+        初始化攻击传播损失函数
+
+        Args:
+            base_weight: 基础预测损失权重
+            temporal_weight: 时序一致性损失权重
+            propagation_weight: 传播链完整性损失权重
+            early_warning_weight: 提前预警损失权重
+            false_alarm_penalty: 误报惩罚权重
+        """
+        super().__init__()
+
+        self.base_weight = base_weight
+        self.temporal_weight = temporal_weight
+        self.propagation_weight = propagation_weight
+        self.early_warning_weight = early_warning_weight
+        self.false_alarm_penalty = false_alarm_penalty
+
+        # 基础损失函数
+        self.bce_loss = nn.BCEWithLogitsLoss(reduction='none')
+        self.focal_loss = FocalLoss(alpha=0.35, gamma=1.5)  # 调整为攻击预测参数
+
+    def forward(self, predictions: torch.Tensor, targets: torch.Tensor,
+                edge_types: Optional[torch.Tensor] = None,
+                timestamps: Optional[torch.Tensor] = None,
+                risk_scores: Optional[torch.Tensor] = None,
+                edge_pairs: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, float]]:
+        """
+        计算攻击传播损失
+
+        Args:
+            predictions: 模型预测 [N]
+            targets: 真实标签 [N]
+            edge_types: 边类型 [N] (可选)
+            timestamps: 时间戳 [N] (可选)
+            risk_scores: 风险分数 [N] (可选)
+            edge_pairs: 边对 [N, 2] (可选)
+
+        Returns:
+            total_loss, loss_components
+        """
+
+        # 1. 基础攻击预测损失
+        base_loss = self._compute_base_attack_loss(predictions, targets, edge_types)
+
+        # 2. 时序一致性损失
+        temporal_loss = self._compute_temporal_consistency_loss(
+            predictions, targets, timestamps, edge_pairs
+        ) if timestamps is not None else torch.tensor(0.0)
+
+        # 3. 攻击传播链完整性损失
+        propagation_loss = self._compute_propagation_chain_loss(
+            predictions, targets, edge_types, risk_scores
+        ) if edge_types is not None else torch.tensor(0.0)
+
+        # 4. 提前预警损失
+        early_warning_loss = self._compute_early_warning_loss(
+            predictions, targets, timestamps
+        ) if timestamps is not None else torch.tensor(0.0)
+
+        # 5. 误报惩罚
+        false_alarm_penalty = self._compute_false_alarm_penalty(predictions, targets)
+
+        # 组合损失
+        total_loss = (
+            self.base_weight * base_loss +
+            self.temporal_weight * temporal_loss +
+            self.propagation_weight * propagation_loss +
+            self.early_warning_weight * early_warning_loss +
+            self.false_alarm_penalty * false_alarm_penalty
+        )
+
+        loss_components = {
+            'base_loss': base_loss.item(),
+            'temporal_loss': temporal_loss.item() if isinstance(temporal_loss, torch.Tensor) else 0.0,
+            'propagation_loss': propagation_loss.item() if isinstance(propagation_loss, torch.Tensor) else 0.0,
+            'early_warning_loss': early_warning_loss.item() if isinstance(early_warning_loss, torch.Tensor) else 0.0,
+            'false_alarm_penalty': false_alarm_penalty.item(),
+            'total_loss': total_loss.item()
+        }
+
+        return total_loss, loss_components
+
+    def _compute_base_attack_loss(self, predictions: torch.Tensor, targets: torch.Tensor,
+                                edge_types: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """计算基础攻击预测损失"""
+
+        # 使用Focal Loss处理类别不平衡（攻击预测中正样本比例25-35%）
+        focal_loss = self.focal_loss(predictions, targets)
+
+        # 如果有边类型信息，对不同类型的边使用不同权重
+        if edge_types is not None:
+            type_weights = self._get_edge_type_weights(edge_types)
+            bce_losses = self.bce_loss(predictions, targets)
+            weighted_bce = (bce_losses * type_weights).mean()
+
+            return 0.7 * focal_loss + 0.3 * weighted_bce
+        else:
+            return focal_loss
+
+    def _get_edge_type_weights(self, edge_types: torch.Tensor) -> torch.Tensor:
+        """获取边类型权重"""
+        weights = torch.ones_like(edge_types, dtype=torch.float)
+
+        # 根据边类型的重要性分配权重
+        type_weight_map = {
+            'triggers': 1.2,      # Flow->Alert: 高权重（关键告警）
+            'initiates': 1.1,     # UE->Flow: 中高权重（攻击发起）
+            'temporal_adj': 1.0,  # Flow->Flow: 标准权重（攻击传播）
+        }
+
+        for i, edge_type in enumerate(edge_types):
+            if isinstance(edge_type, str):
+                weights[i] = type_weight_map.get(edge_type, 1.0)
+            else:
+                weights[i] = 1.0  # 默认权重
+
+        return weights
+
+    def _compute_temporal_consistency_loss(self, predictions: torch.Tensor, targets: torch.Tensor,
+                                         timestamps: torch.Tensor, edge_pairs: torch.Tensor) -> torch.Tensor:
+        """计算时序一致性损失"""
+        if len(timestamps) < 2:
+            return torch.tensor(0.0)
+
+        # 按时间排序
+        sorted_indices = torch.argsort(timestamps)
+        sorted_predictions = predictions[sorted_indices]
+        sorted_targets = targets[sorted_indices]
+
+        # 计算相邻时间步的预测一致性
+        consistency_loss = 0.0
+        count = 0
+
+        for i in range(len(sorted_predictions) - 1):
+            # 如果连续两个时间步都是攻击，预测应该保持一致性
+            if sorted_targets[i] == 1 and sorted_targets[i + 1] == 1:
+                pred_diff = torch.abs(sorted_predictions[i] - sorted_predictions[i + 1])
+                consistency_loss += pred_diff
+                count += 1
+
+        return consistency_loss / max(count, 1)
+
+    def _compute_propagation_chain_loss(self, predictions: torch.Tensor, targets: torch.Tensor,
+                                      edge_types: torch.Tensor, risk_scores: torch.Tensor) -> torch.Tensor:
+        """计算攻击传播链完整性损失"""
+        if edge_types is None or risk_scores is None:
+            return torch.tensor(0.0)
+
+        # 识别攻击传播链：initiates -> triggers -> temporal_adj
+        chain_loss = 0.0
+        chain_count = 0
+
+        # 简化的链完整性检查
+        initiate_mask = (edge_types == 'initiates') if hasattr(edge_types, '__iter__') else torch.zeros_like(targets, dtype=torch.bool)
+        trigger_mask = (edge_types == 'triggers') if hasattr(edge_types, '__iter__') else torch.zeros_like(targets, dtype=torch.bool)
+
+        # 如果有攻击发起但没有对应的告警触发，增加损失
+        if torch.any(initiate_mask) and torch.any(trigger_mask):
+            initiate_predictions = predictions[initiate_mask]
+            trigger_predictions = predictions[trigger_mask]
+
+            # 攻击发起的预测应该与告警触发的预测相关
+            if len(initiate_predictions) > 0 and len(trigger_predictions) > 0:
+                initiate_mean = initiate_predictions.mean()
+                trigger_mean = trigger_predictions.mean()
+
+                # 如果攻击发起预测高但告警触发预测低，增加损失
+                chain_inconsistency = F.relu(initiate_mean - trigger_mean - 0.1)
+                chain_loss += chain_inconsistency
+                chain_count += 1
+
+        return chain_loss / max(chain_count, 1)
+
+    def _compute_early_warning_loss(self, predictions: torch.Tensor, targets: torch.Tensor,
+                                  timestamps: torch.Tensor) -> torch.Tensor:
+        """计算提前预警损失"""
+        if len(timestamps) < 2:
+            return torch.tensor(0.0)
+
+        # 奖励提前预警：在攻击发生前的预测
+        warning_loss = 0.0
+        warning_count = 0
+
+        # 按时间排序
+        sorted_indices = torch.argsort(timestamps)
+        sorted_predictions = predictions[sorted_indices]
+        sorted_targets = targets[sorted_indices]
+        sorted_timestamps = timestamps[sorted_indices]
+
+        for i in range(len(sorted_targets) - 1):
+            # 如果当前是预警（高预测值），下一个时间步是攻击
+            if sorted_predictions[i] > 0.7 and sorted_targets[i + 1] == 1:
+                # 计算提前预警时间
+                lead_time = sorted_timestamps[i + 1] - sorted_timestamps[i]
+
+                # 奖励更长的提前预警时间（负损失）
+                if lead_time > 0:
+                    warning_bonus = -torch.log(1 + lead_time / 30.0)  # 30秒为基准
+                    warning_loss += warning_bonus
+                    warning_count += 1
+
+        return warning_loss / max(warning_count, 1)
+
+    def _compute_false_alarm_penalty(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """计算误报惩罚"""
+        # 识别误报：高预测值但实际为负样本
+        false_alarm_mask = (predictions > 0.5) & (targets == 0)
+
+        if torch.any(false_alarm_mask):
+            false_alarm_predictions = predictions[false_alarm_mask]
+            # 误报惩罚与预测置信度成正比
+            penalty = (false_alarm_predictions - 0.5).mean()
+            return penalty
+        else:
+            return torch.tensor(0.0)
